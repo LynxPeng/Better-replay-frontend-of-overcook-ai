@@ -9,6 +9,7 @@ public static class TownExterior {
         "Roads/StonePath/StonePath_Straight","Roads/Bridges/Bridge_Beach",
         "Trees/Tree_Simple_Green","Trees/Tree_Fruits_Lemon","Trees/Tree_Green_x3Crowns","Trees/PineTree_Bright",
         "Flowers/Flowers_Mixed","Flowers/Flowers_Pink","Flowers/Flowers_Yellow","Flowers/Flowers_BlueLight",
+        "Buildings/Shops/IceCreamCart","Props/Balloons/Blue_Balloon-Flying","Props/Decoration_PalmPlant","Laterns/LightChain",
         "Props/GrassStems","Props/GrassStemsHigh","Props/Bank","Props/Boat","Props/Decoration_FlowerBox","Props/Clock",
         "Stones/StonesX3","Stones/Stone_LowFlat_1","Fences/Fence_Field","Laterns/Latern_Path","Laterns/Latern_Small"};
     public static GameObject Build(Transform parent,int width,int height) {
@@ -35,7 +36,10 @@ public static class TownExterior {
         for(float x=-4.8f;x<width+5;x+=2.8f) {
             Prop("Trees/Tree_Simple_Green",street,2.3f,new Vector3(x,-.2f,14));
             Prop("Flowers/Flowers_Mixed",street,1.1f,new Vector3(x,-.2f,12.5f));
-            if(!NearCrossing(x,width))Prop("Laterns/Latern_Path",street,1.5f,new Vector3(x,-.2f,4.2f));
+            if(!NearCrossing(x,width)) {
+                var lamp=Prop("Laterns/Latern_Path",street,1.85f,new Vector3(x,-.2f,4.2f));
+                if(lamp)lamp.AddComponent<CafeLamp>().Bind(lamp.GetComponentInChildren<Renderer>());
+            }
             if(!NearCrossing(x+1,width))Prop("Props/Decoration_FlowerBox",street,.95f,new Vector3(x+1,-.2f,4.3f),-1,180);
             Prop("Flowers/Flowers_Pink",street,.75f,new Vector3(x+.4f,-.2f,9.4f),-1,30);
         }
@@ -44,6 +48,14 @@ public static class TownExterior {
             Prop("Props/Decoration_FlowerBox",street,.85f,new Vector3(x+1,-.2f,9.2f));
         }
         Prop("Props/Clock",street,1.4f,new Vector3(cx,-.2f,9.6f),-1,180);
+        // A single vendor at the far pavement, between the cafe and the clock.
+        // The pack's balloon includes its tether; sway around the tied end.
+        var cart=Prop("Buildings/Shops/IceCreamCart",street,1.65f,new Vector3(cx-1.6f,-.2f,8.68f),-1,160);
+        if(cart) {
+            var tether=new Vector3(cx-2.23f,.32f,8.61f);
+            var balloon=Prop("Props/Balloons/Blue_Balloon-Flying",street,1.65f,tether);
+            if(balloon)balloon.AddComponent<AmbientSway>().Configure(tether,8,.24f,.31f);
+        }
         RiverGarden(t,width,height,false,riverFront,riverBack);
         RiverGarden(t,width,height,true,riverFront,riverBack);
         root.AddComponent<RiverTraffic>();

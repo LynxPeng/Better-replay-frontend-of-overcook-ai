@@ -24,6 +24,8 @@ def wait_for(predicate, deadline, processes):
 def run(options):
     if options.drop_step and not (options.mode == "hh" and 0 < options.drop_step < options.steps):
         raise ValueError("--drop-step needs a two-player room and a tick before the last")
+    if options.capture_tick is not None and not (0 <= options.capture_tick < options.steps):
+        raise ValueError("--capture-tick must be in the match")
     client = options.client.resolve(strict=True)
     folder = options.out.resolve()
     folder.mkdir(parents=True, exist_ok=False)
@@ -64,13 +66,19 @@ def run(options):
                          "--live-smoke-report", str(report), "-logFile", str(folder / f"{role}.log")]
                 if role == "guest" and options.drop_step:
                     flags.extend(["--live-smoke-drop-step", str(options.drop_step)])
-                processes.append(subprocess.Popen([str(client), *flags], env=env, startupinfo=hidden))
+                capture_host = role == "host" and options.capture_tick is not None
+                if capture_host:
+                    flags.extend(["--capture-ui", "--capture-size", "1280x720", "--frame", str(options.capture_tick),
+                                  "--capture", str(folder / "match.png")])
+                processes.append(subprocess.Popen([str(client), *flags], env=env, startupinfo=None if capture_host else hidden))
             wait_for(lambda: all(process.poll() is not None for process in processes), deadline, [service, *processes])
             if any(p.returncode for p in processes):
                 raise RuntimeError("Live player reported failure")
             replay_path, = records.glob("*.ocrep.json")
             replay = json.loads(replay_path.read_text(encoding="utf-8"))
             validate_replay(replay)
+            if options.capture_tick is not None and not (folder / "match.png").is_file():
+                raise ValueError("The player did not capture the requested HUD")
             if not replay["header"]["complete"] or len(replay["segments"]) != options.steps:
                 raise ValueError("Missing complete terminal record")
             summary = {"mode": options.mode, "ticks": len(replay["segments"]), "frames": len(replay["frames"]),
@@ -107,4 +115,5 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=400)
     parser.add_argument("--rate", type=int, default=2)
     parser.add_argument("--drop-step", type=int, default=0, help="Disconnect the guest once and verify recovery")
+    parser.add_argument("--capture-tick", type=int, help="Show the host window and save its HUD at a confirmed tick")
     run(parser.parse_args())

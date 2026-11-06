@@ -64,130 +64,247 @@ public sealed partial class LiveClient {
         }
         player.Load(result.record);Reviewing=true;
     }
-    internal void Draw(ReplayUiTheme ui,float height) {
-        ui.Panel(ReplayUiLayout.Sidebar(height));
-        ui.Label(new Rect(32,34,226,36),"协作厨房",ui.Title);
-        ui.Label(new Rect(32,77,226,22),PhaseName(),ui.Heading);
-        ui.Rule(32,117,231);
-        if(welcomed) {
-            ui.Label(new Rect(32,138,230,28),ModeName(lobby.mode),ui.Heading);
-            ui.Label(new Rect(32,174,230,22),host?"房主":"来宾",ui.Caption);
-            string role=lobby.mode=="ai_ai"?"观战":((host?lobby.host_slot:1-lobby.host_slot)==0?"蓝方 · 大肥鱼":"橙方 · 企鹅");
-            ui.Label(new Rect(32,202,230,26),role,ui.Heading);
-            ui.Label(new Rect(32,245,224,26),ReplayUiTheme.KitchenName(lobby.layout??""),ui.Heading);
-            ui.Label(new Rect(32,280,224,24),$"{lobby.tick_rate:0.#} 步/秒 · {lobby.horizon} 步",ui.Caption);
-            if(latestTick>=0&&player.Data!=null) {
-                var frames=player.Data.frames;var frame=frames[frames.Length-1];
-                ui.Rule(32,325,230);ui.Label(new Rect(32,342,100,26),"团队得分",ui.Heading);
-                ui.Label(new Rect(32,372,220,58),frame.score.ToString("0"),ui.Score);
-                ui.Label(new Rect(32,440,225,24),$"第 {latestTick} / {lobby.horizon} 步");
-                var orders=frame.state.all_orders;
-                if(orders!=null && orders.Length>0) {
-                    ui.Label(new Rect(32,479,220,20),"订单",ui.Caption);
-                    string[] ingredients=orders[0].ingredients??Array.Empty<string>();
-                    ui.Label(new Rect(32,506,225,28),string.Join(" + ",Array.ConvertAll(ingredients,i=>i=="onion"?"洋葱":"番茄")));
-                }
-            }
-        } else ui.Label(new Rect(32,142,220,23),retrying?"保持窗口开启即可重连":"局域网合作",ui.Heading);
-        if((connection!=null||retrying)&&ui.Click(new Rect(32,height-64,222,36),"离开房间"))LeaveRoom();
-        if(!ShowKitchen || Phase=="lobby")DrawLobby(ui,height);
-        else DrawMatch(ui,height);
+    RenderTexture menuPhoto;
+    bool portraitAttempted;
+    ReplayUiTheme boundTheme;
+    GUIStyle field,wrapped,display,whiteScore,lightWrap,portraitCaption;
+    string scoreMatch="";
+    float lastScore,scoreChangedAt=-10;
+
+    void LateUpdate() {
+        if(Reviewing || ShowKitchen || portraitAttempted || Application.isBatchMode)return;
+        portraitAttempted=true;
+        try { menuPhoto=LiveLobbyStillLife.Photograph(); }
+        catch(Exception ex){Debug.LogWarning("餐厅菜单陈列暂不可用："+ex.Message);}
     }
-    static GUIStyle Wrap(GUIStyle style){var copy=new GUIStyle(style);copy.wordWrap=true;return copy;}
-    void DrawLobby(ReplayUiTheme ui,float height) {
-        var panel=new Rect(310,18,950,height-36);ui.Panel(panel);
-        ui.Label(new Rect(338,40,560,40),welcomed?"房间大厅":"加入局域网厨房",ui.Title);
-        if(!welcomed) {
-            ui.Label(new Rect(338,106,395,26),"房主地址（可粘贴 IP:端口）",ui.Heading);
-            address=GUI.TextField(new Rect(338,140,395,34),address,255,FieldStyle(ui));
-            ui.Label(new Rect(750,106,140,26),"端口",ui.Heading);
-            portText=GUI.TextField(new Rect(750,140,105,34),portText,5,FieldStyle(ui));
-            ui.Label(new Rect(338,194,130,26),"昵称",ui.Heading);
-            nickname=GUI.TextField(new Rect(338,225,282,34),nickname,24,FieldStyle(ui));
-            bool enabled=GUI.enabled;GUI.enabled=enabled && connection==null && !retrying;
-            if(ui.Click(new Rect(338,286,210,40),"加入房间",ui.Primary))Connect(false);
-            GUI.enabled=enabled;
-            ui.Label(new Rect(338,347,785,60),connectionStatus,Wrap(ui.Heading));
-            ui.Label(new Rect(338,423,815,60),error,Wrap(ui.Caption));return;
+    void OnDisable() {
+        if(menuPhoto){menuPhoto.Release();Destroy(menuPhoto);menuPhoto=null;}
+        portraitAttempted=false;
+    }
+    void EnsureLiveStyles(ReplayUiTheme ui) {
+        if(ReferenceEquals(ui,boundTheme))return;
+        boundTheme=ui;
+        field=new GUIStyle(ui.Row){fontSize=16,fontStyle=FontStyle.Normal,alignment=TextAnchor.MiddleLeft,
+            padding=new RectOffset(12,12,3,3),clipping=TextClipping.Clip};
+        wrapped=new GUIStyle(ui.Caption){wordWrap=true};
+        display=new GUIStyle(ui.Title){fontSize=30};
+        whiteScore=new GUIStyle(ui.OnDarkScore){fontSize=48};
+        lightWrap=new GUIStyle(ui.OnDarkCaption){wordWrap=true,alignment=TextAnchor.UpperLeft};
+        portraitCaption=new GUIStyle(ui.OnDark){fontStyle=FontStyle.Normal,fontSize=14};
+        portraitCaption.normal.textColor=new Color(1,.97f,.87f);
+    }
+    internal void Draw(ReplayUiTheme ui,float height) {
+        EnsureLiveStyles(ui);
+        if(!ShowKitchen || Phase=="lobby"){DrawLobby(ui,height);return;}
+        DrawScoreboard(ui,height);
+        DrawMatch(ui,height);
+    }
+    static string Chef(int i)=>i==0?"大肥鱼":"企鹅";
+    string MySeat() => lobby.mode=="ai_ai"?"观战席":((host?lobby.host_slot:1-lobby.host_slot)==0?"蓝方 · 大肥鱼":"橙方 · 企鹅");
+    string ReadyState(int seat) {
+        bool present=seat==0?lobby.connected0:lobby.connected1;
+        bool ready=seat==0?lobby.ready0:lobby.ready1;
+        return !present?"待加入":ready?"已准备":"未准备";
+    }
+    static string EndReason(string reason) {
+        switch(reason) {
+            case "horizon":return "对局时间已到";
+            case "host_stop":return "房主提前结束了对局";
+            case "player_left":return "玩家已离开房间";
+            case "reconnect_timeout":return "等待重连已超时";
+            case "match_error":return "对局服务发生错误";
+            case "server_shutdown":return "房主已关闭服务";
+            default:return reason??"";
         }
-        lobbyScroll=GUI.BeginScrollView(new Rect(328,91,910,height-135),lobbyScroll,new Rect(0,0,865,540));
-        try {
-            string seats=$"房主 · {(lobby.ready0?"已准备":"未准备")}";
-            if(lobby.mode=="human_human")seats+=lobby.connected1?(lobby.ready1?"     来宾 · 已准备":"     来宾 · 未准备"):"     等待来宾加入";
-            ui.Label(new Rect(10,0,840,32),seats,ui.Heading);
-            string network=host&&lanAddresses.Length>0?string.Join("   ",lanAddresses):address+":"+portText;
-            ui.Label(new Rect(10,35,840,24),network,ui.Caption);
-            bool enabled=GUI.enabled;
-            GUI.enabled=enabled && host && Phase=="lobby" && !applying;
-            string[] modes={"human_ai","human_human","ai_ai"};
-            for(int i=0;i<modes.Length;i++)if(ui.Click(new Rect(10+i*178,75,170,36),ModeName(modes[i]),draft.mode==modes[i]?ui.Selected:ui.Button))ChooseMode(modes[i]);
-            ui.Label(new Rect(10,133,108,30),"厨房",ui.Heading);
-            if(ui.Click(new Rect(112,130,268,34),ReplayUiTheme.KitchenName(draft.layout??"")+"  ›")){draft.layout=Next(layouts,draft.layout);dirty=true;}
-            if(ui.Click(new Rect(394,130,157,34),draft.old_dynamics?"旧烹饪规则  ›":"新烹饪规则  ›")){draft.old_dynamics=!draft.old_dynamics;dirty=true;}
-            if(draft.mode=="human_ai" && ui.Click(new Rect(570,130,205,34),draft.host_slot==0?"房主席位 · 蓝方  ›":"房主席位 · 橙方  ›")){draft.host_slot=1-draft.host_slot;dirty=true;}
-            else if(draft.mode=="human_human")ui.Label(new Rect(570,130,205,34),draft.host_slot==0?"房主席位 · 蓝方":"房主席位 · 橙方");
-            string[] ids=Array.ConvertAll(models,m=>m.id);
+    }
+    void DrawScoreboard(ReplayUiTheme ui,float height) {
+        ui.Panel(ReplayUiLayout.Sidebar(height));
+        ui.Label(new Rect(33,31,230,34),ReplayUiTheme.KitchenName(lobby.layout??""),ui.Title);
+        ui.Label(new Rect(34,68,230,24),ModeName(lobby.mode)+"   /   "+MySeat(),ui.Caption);
+        var frames=player.Data?.frames;
+        if(frames!=null && frames.Length>0) {
+            var frame=frames[frames.Length-1];
+            if(scoreMatch!=matchId){scoreMatch=matchId;lastScore=frame.score;scoreChangedAt=-10;}
+            if(frame.score>lastScore)scoreChangedAt=Time.unscaledTime;
+            lastScore=frame.score;
+            float accent=1-Mathf.Clamp01((Time.unscaledTime-scoreChangedAt)/.5f);
+            var board=new Rect(28,105,242,108);
+            ui.Panel(board,true);
+            ui.Label(new Rect(45,116,198,23),"团队得分",ui.OnDarkCaption);
+            var saved=GUI.contentColor;GUI.contentColor=Color.Lerp(Color.white,new Color(1,.83f,.49f),accent);
+            GUI.Label(new Rect(45,140-accent*4,202,55),frame.score.ToString("0"),whiteScore);
+            GUI.contentColor=saved;
+            float y=236;
+            ui.Label(new Rect(34,y,218,24),"当前订单",ui.Heading);y+=32;
+            var orders=frame.state.all_orders;
+            if(orders==null||orders.Length==0){ui.Label(new Rect(34,y,217,25),"暂无订单",ui.Caption);y+=36;}
+            else {
+                int available=Mathf.Max(1,Mathf.FloorToInt((height-y-200)/60));
+                for(int i=0;i<Mathf.Min(available,orders.Length);i++) {
+                    ui.OrderTicket(new Rect(32,y,231,54),orders[i].ingredients);y+=60;
+                }
+                if(orders.Length>available){ui.Label(new Rect(34,y,218,23),"另有 "+(orders.Length-available)+" 项订单",ui.Caption);y+=25;}
+            }
+            y+=8;ui.Rule(34,y,218);y+=13;
             for(int i=0;i<2;i++) {
-                int y=185+48*i;ui.Label(new Rect(10,y,99,30),i==0?"蓝方":"橙方",ui.Heading);
-                bool ai=draft.mode=="ai_ai" || (draft.mode=="human_ai" && i!=draft.host_slot);
-                if(ai) {
-                    string id=i==0?draft.model0:draft.model1;
-                    if(ui.Click(new Rect(112,y,439,33),ModelLabel(id)+"  ›")){
-                        if(i==0)draft.model0=Next(ids,id);else draft.model1=Next(ids,id);dirty=true;
-                    }
-                } else ui.Label(new Rect(124,y,419,32),i==draft.host_slot?"房主操作":"局域网来宾操作");
+                bool isAi=lobby.mode=="ai_ai" || (lobby.mode=="human_ai" && i!=lobby.host_slot);
+                ui.Fill(new Rect(34,y+10,5,14),i==0?ui.BlueSeat:ui.OrangeSeat);
+                ui.Label(new Rect(49,y,100,34),Chef(i),ui.Heading);
+                ui.Label(new Rect(155,y,99,34),isAi?"AI 厨师":i==lobby.host_slot?"房主":"来宾",ui.Caption);y+=32;
             }
-            if(HasModel("sp-cramped-room") && ui.Click(new Rect(570,185,205,33),"上游 SP 预设"))SetSp();
-            ui.Label(new Rect(10,288,100,30),"随机种子",ui.Heading);
-            string typed=GUI.TextField(new Rect(112,288,160,33),seedText,10,FieldStyle(ui));
-            if(typed!=seedText){seedText=typed;dirty=true;}
-            ui.Label(new Rect(300,288,245,33),$"{draft.horizon} 步   ·   每秒 {draft.tick_rate} 步",ui.Caption);
-            if(ui.Click(new Rect(570,288,205,33),dirty?"应用房间设置":"应用设置",dirty?ui.Primary:ui.Row))ApplyDraft();
-            GUI.enabled=enabled&&Phase=="lobby"&&!dirty;
-            bool ready=host?lobby.ready0:lobby.ready1;
-            if(ui.Click(new Rect(10,359,170,40),ready?"取消准备":"准备",ready?ui.Selected:ui.Primary))Ready(!ready);
-            if(host) {
-                GUI.enabled=GUI.enabled && lobby.ready0 && (lobby.mode!="human_human"||lobby.ready1);
-                if(ui.Click(new Rect(192,359,170,40),"开始对局",ui.Primary))Control("start");
-            }
-            if(lobby.mode=="human_human") {
-                GUI.enabled=enabled && Phase=="lobby" && !dirty && !applying && lobby.connected0 && lobby.connected1 && !lobby.ready0 && !lobby.ready1;
-                if(ui.Click(new Rect(374,359,170,40),"交换角色"))Control("swap");
-            }
-            GUI.enabled=enabled;
-            string info=Phase=="countdown"?$"即将开始 · {SecondsLeft(lobby.countdown)}":applying?"房主正在应用设置…":dirty?"先应用房间设置，再准备开始":"";
-            ui.Label(new Rect(10,416,835,28),info,ui.Heading);
-            if(error!="")ui.Label(new Rect(10,455,835,65),error,Wrap(ui.Caption));
+        }
+        if(ui.Click(new Rect(31,height-67,234,36),"离开房间",ui.Row))LeaveRoom();
+    }
+    void DrawLobby(ReplayUiTheme ui,float height) {
+        ui.Fill(new Rect(0,0,1280,height),ui.Mist);
+        // The striped awning and a photograph of the furnished table identify the
+        // lobby as the same café the players are about to enter.
+        for(int i=0;i<5;i++)ui.Fill(new Rect(39+i*9,30,9,i%2==0?21:17),i%2==0?ui.Marine:ui.Gold);
+        ui.Label(new Rect(98,19,290,45),"协作厨房",display);
+        ui.Fill(new Rect(1030,38,7,7),welcomed?ui.Marine:ui.Gold);
+        ui.Label(new Rect(1049,26,188,30),welcomed?(host?"房主已连接":"来宾已连接"):retrying?"正在重连":"局域网联机",ui.Heading);
+        ui.Rule(36,79,1208);
+        float top=98,cardHeight=height-top-22;
+        if(!welcomed) {
+            float joinHeight=Mathf.Min(cardHeight,retrying || !string.IsNullOrEmpty(error)?498:451);
+            top+=(cardHeight-joinHeight)*.5f;
+            cardHeight=joinHeight;
+        }
+        DrawLobbyPortrait(ui,new Rect(36,top,432,cardHeight));
+        ui.Panel(new Rect(484,top,760,cardHeight));
+        ui.Label(new Rect(512,top+18,700,47),welcomed?"开局准备":"加入局域网厨房",display);
+        ui.Rule(512,top+78,704);
+        float available=Mathf.Max(100,cardHeight-102);
+        float content=welcomed?454:connection!=null || retrying || !string.IsNullOrEmpty(error)?365:289;
+        lobbyScroll=GUI.BeginScrollView(new Rect(508,top+90,716,available),lobbyScroll,new Rect(0,0,689,content),
+            false,false,GUIStyle.none,ui.ScrollTrack);
+        try {
+            if(welcomed)DrawRoomForm(ui);
+            else DrawJoinForm(ui);
         } finally {GUI.EndScrollView();}
     }
-    static GUIStyle FieldStyle(ReplayUiTheme ui) {
-        var style=new GUIStyle(GUI.skin.textField){font=ui.Text.font,fontSize=15,alignment=TextAnchor.MiddleLeft};
-        return style;
+    void DrawLobbyPortrait(ReplayUiTheme ui,Rect area) {
+        ui.Panel(area,true);
+        float photoHeight=Mathf.Min(area.width-4,Mathf.Max(100,area.height-(welcomed?151:connection!=null || retrying?131:80)));
+        var photoRect=new Rect(area.x+2,area.y+2,area.width-4,photoHeight);
+        if(menuPhoto && Event.current.type==EventType.Repaint) {
+            float slice=photoHeight/photoRect.width;
+            GUI.DrawTextureWithTexCoords(photoRect,menuPhoto,new Rect(0,(1-slice)*.45f,1,slice),false);
+        }
+        float y=photoRect.yMax+12;
+        ui.Label(new Rect(area.x+22,y,area.width-44,28),welcomed?ModeName(lobby.mode):"双人餐厅",ui.OnDarkTitle);
+        string detail=welcomed?ReplayUiTheme.KitchenName(lobby.layout??"")+"    /    "+MySeat():"蓝方大肥鱼   /   橙方企鹅";
+        ui.Label(new Rect(area.x+22,y+31,area.width-44,24),detail,portraitCaption);
+        string network=host&&lanAddresses.Length>0?string.Join("   ",lanAddresses):address+":"+portText;
+        if(welcomed) {
+            GUI.Label(new Rect(area.x+22,y+62,area.width-44,Mathf.Max(28,area.yMax-y-119)),network,lightWrap);
+        }
+        if((connection!=null||retrying)&&ui.Click(new Rect(area.x+20,area.yMax-53,144,32),"离开房间",ui.Selected))LeaveRoom();
+    }
+    string WriteIn(ReplayUiTheme ui,Rect rect,string key,string value,int limit) {
+        GUI.SetNextControlName(key);
+        var edited=GUI.TextField(rect,value,limit,field);
+        bool focused=GUI.GetNameOfFocusedControl()==key;
+        ui.Fill(new Rect(rect.x+2,rect.yMax-2,rect.width-4,focused?2:1),focused?ui.Gold:ui.Muted);
+        return edited;
+    }
+    void DrawJoinForm(ReplayUiTheme ui) {
+        ui.Label(new Rect(5,7,480,25),"房主地址",ui.Heading);
+        ui.Label(new Rect(456,7,181,25),"端口",ui.Heading);
+        address=WriteIn(ui,new Rect(5,42,435,45),"live-address",address,255);
+        portText=WriteIn(ui,new Rect(456,42,177,45),"live-port",portText,5);
+        ui.Label(new Rect(5,94,625,22),"可直接粘贴房主大厅显示的 IP:端口",ui.Caption);
+        ui.Label(new Rect(5,139,400,24),"你的昵称",ui.Heading);
+        nickname=WriteIn(ui,new Rect(5,170,435,45),"live-name",nickname,24);
+        bool enabled=GUI.enabled;GUI.enabled=enabled && connection==null && !retrying;
+        if(ui.Click(new Rect(5,240,245,44),retrying?"正在重连":connection!=null?"正在连接":"加入房间",ui.Primary))Connect(false);
+        GUI.enabled=enabled;
+        if(retrying||connection!=null||!string.IsNullOrEmpty(error))
+            ui.Label(new Rect(5,294,625,63),string.IsNullOrEmpty(error)?connectionStatus:error,wrapped);
+    }
+    static readonly string[] LobbyModes={"human_ai","human_human","ai_ai"};
+    void DrawRoomForm(ReplayUiTheme ui) {
+        bool enabled=GUI.enabled,edit=enabled && host && Phase=="lobby" && !applying;
+        GUI.enabled=edit;
+        for(int i=0;i<LobbyModes.Length;i++) {
+            string mode=LobbyModes[i];
+            if(ui.Click(new Rect(4+i*221,5,210,38),ModeName(mode),draft.mode==mode?ui.Primary:ui.Selected))ChooseMode(mode);
+        }
+        ui.Label(new Rect(5,60,280,24),"厨房",ui.Heading);
+        ui.Label(new Rect(333,60,189,24),"烹饪规则",ui.Heading);
+        ui.Label(new Rect(550,60,112,24),"随机种子",ui.Heading);
+        if(ui.Click(new Rect(4,91,310,34),ReplayUiTheme.KitchenName(draft.layout??"")+"  ›",ui.RowSelected)){draft.layout=Next(layouts,draft.layout);dirty=true;}
+        if(ui.Click(new Rect(332,91,195,34),draft.old_dynamics?"旧规则   ›":"新规则   ›",ui.RowSelected)){draft.old_dynamics=!draft.old_dynamics;dirty=true;}
+        string typed=WriteIn(ui,new Rect(548,91,110,34),"live-seed",seedText,10);
+        if(typed!=seedText){seedText=typed;dirty=true;}
+        ui.Label(new Rect(5,145,277,24),"厨师席位",ui.Heading);
+        if(draft.mode=="human_ai" && ui.Click(new Rect(332,142,155,26),"交换人机席位",ui.Row)){draft.host_slot=1-draft.host_slot;dirty=true;}
+        if(draft.mode!="human_human" && HasModel("sp-cramped-room") && ui.Click(new Rect(495,142,163,26),"上游 SP 预设",ui.Row))SetSp();
+        for(int i=0;i<2;i++){
+            int y=181+46*i;
+            ui.Fill(new Rect(6,y+5,5,25),i==0?ui.BlueSeat:ui.OrangeSeat);
+            ui.Label(new Rect(23,y,172,35),(i==0?"蓝方   ":"橙方   ")+Chef(i),ui.Heading);
+            bool ai=draft.mode=="ai_ai" || (draft.mode=="human_ai" && i!=draft.host_slot);
+            if(ai) {
+                string id=i==0?draft.model0:draft.model1;
+                if(ui.Click(new Rect(205,y,453,34),ModelLabel(id)+"  ›",ui.RowSelected)) {
+                    var ids=Array.ConvertAll(models,m=>m.id);
+                    if(i==0)draft.model0=Next(ids,id);else draft.model1=Next(ids,id);
+                    dirty=true;
+                }
+            } else {
+                int seat=i==draft.host_slot?0:1;
+                ui.Label(new Rect(216,y,237,34),seat==0?"房主操作":"来宾操作",ui.Text);
+                ui.Label(new Rect(546,y,106,34),ReadyState(seat),ui.Caption);
+            }
+        }
+        ui.Rule(4,275,654);
+        if(ui.Click(new Rect(463,290,195,32),"应用房间设置",dirty?ui.Primary:ui.Row))ApplyDraft();
+        GUI.enabled=enabled;
+        ui.Label(new Rect(5,288,430,35),$"{draft.horizon} 步    /    每秒 {draft.tick_rate} 步",ui.Caption);
+        GUI.enabled=enabled && Phase=="lobby" && !dirty && !applying;
+        bool ready=host?lobby.ready0:lobby.ready1;
+        if(ui.Click(new Rect(4,343,186,42),ready?"取消准备":"准备",ready?ui.Selected:ui.Primary))Ready(!ready);
+        if(host) {
+            GUI.enabled=GUI.enabled&&lobby.ready0&&(lobby.mode!="human_human"||lobby.ready1);
+            if(ui.Click(new Rect(203,343,186,42),"开始对局",ui.Primary))Control("start");
+        }
+        if(lobby.mode=="human_human") {
+            GUI.enabled=enabled && Phase=="lobby" && !dirty && !applying && lobby.connected0 && lobby.connected1 && !lobby.ready0 && !lobby.ready1;
+            if(ui.Click(new Rect(470,343,188,42),"交换角色",ui.Selected))Control("swap");
+        }
+        GUI.enabled=enabled;
+        string info=!string.IsNullOrEmpty(error)?error:applying?"正在应用设置…":dirty?"应用房间设置后即可准备。":
+            lobby.mode=="human_human" && !lobby.connected1?"等待另一位玩家加入房间。":ready?"已准备":Phase=="countdown"?"即将开始":"";
+        ui.Label(new Rect(5,394,657,51),info,wrapped);
     }
     void DrawMatch(ReplayUiTheme ui,float height) {
         Rect panel=ReplayUiLayout.Transport(height);ui.Panel(panel);
-        float y=panel.y+10;
+        float y=panel.y+8;
         int remaining=Mathf.CeilToInt(Mathf.Max(0,lobby.horizon-latestTick)/Mathf.Max(1,lobby.tick_rate));
-        string status=Phase=="countdown"?(lobby.warming?"加载模型中":$"{SecondsLeft(lobby.countdown)} 秒后开始"):PhaseName();
-        string label=ModeName(lobby.mode)+" · "+status+$"      剩余 {remaining/60}:{remaining%60:00}";
-        if(Phase=="reconnecting")label+="  "+SecondsLeft(lobby.reconnect_remaining)+" 秒";
-        ui.Label(new Rect(326,y,521,30),label,ui.Heading);
+        string status=Phase=="countdown"?(lobby.warming?"加载模型":$"{SecondsLeft(lobby.countdown)} 秒后开局"):PhaseName();
+        if(Phase=="reconnecting")status+="   "+SecondsLeft(lobby.reconnect_remaining)+" 秒";
+        ui.Label(new Rect(329,y+1,215,24),result!=null?(result.complete?"对局完成":"提前结束"):status,ui.Heading);
+        ui.Label(new Rect(329,y+27,210,35),result!=null?EndReason(result.reason):$"剩余   {remaining/60}:{remaining%60:00}",ui.Text);
+        float barX=557,barWidth=230;
+        ui.Label(new Rect(barX,y+2,barWidth,25),$"{Mathf.Max(0,latestTick)} / {lobby.horizon} 步",ui.Caption);
+        ui.Fill(new Rect(barX,y+33,barWidth,4),ui.Mist);
+        ui.Fill(new Rect(barX,y+33,barWidth*Mathf.Clamp01((float)latestTick/Mathf.Max(1,lobby.horizon)),4),ui.Gold);
         if(result!=null) {
-            ui.Label(new Rect(326,y+32,780,42),(result.complete?"已完成":"提前结束")+"   "+result.reason+(host?"":"   ·   记录保存在房主电脑"),ui.Caption);
-            if(host&&Local(address)&&File.Exists(result.record)&&ui.Click(new Rect(932,y,135,35),"回看本局",ui.Primary)){
-                ReviewResult();
-            }
-            if(host&&ui.Click(new Rect(1080,y,140,35),"再来一局"))Control("reset");
-        }else{
-            string message=error!=""?error:MayAct?"WASD / 方向键移动     空格 / E 交互":"双方 AI 正在合作";
-            if(Phase=="paused")message=string.IsNullOrEmpty(lobby.policy_fault)?
-                $"房主{(lobby.ready0?"已准备":"未准备")}     来宾{(lobby.ready1?"已准备":"未准备")}":lobby.policy_fault;
-            ui.Label(new Rect(326,y+34,770,31),message,ui.Caption);
-            if(Phase=="running"||Phase=="paused") {
-                if(host&&!string.IsNullOrEmpty(lobby.policy_fault)&&ui.Click(new Rect(775,y,158,35),"重载模型"))Control("reload_model");
-                if(ui.Click(new Rect(944,y,135,35),Phase=="paused"?"准备继续":"暂停对局"))Send(new LivePause{type="pause",paused=Phase!="paused"});
-                if(host && ui.Click(new Rect(1091,y,135,35),"结束本局"))Control("stop");
-            }
+            if(host && Local(address) && File.Exists(result.record) &&
+                ui.Click(new Rect(939,y+8,135,38),"回看本局",ui.Primary))ReviewResult();
+            if(host && ui.Click(new Rect(1086,y+8,140,38),"再来一局",ui.Selected))Control("reset");
+            if(!host)ui.Label(new Rect(908,y+8,316,36),"记录保存在房主电脑",ui.Caption);
+        } else if(Phase=="running"||Phase=="paused") {
+            if(host && !string.IsNullOrEmpty(lobby.policy_fault) && ui.Click(new Rect(793,y+8,133,38),"重载模型",ui.Selected))Control("reload_model");
+            if(ui.Click(new Rect(939,y+8,135,38),Phase=="paused"?"准备继续":"暂停对局",ui.Primary))Send(new LivePause{type="pause",paused=Phase!="paused"});
+            if(host && ui.Click(new Rect(1086,y+8,140,38),"结束本局",ui.Row))Control("stop");
+        }
+        if(result==null) {
+            string msg=!string.IsNullOrEmpty(error)?error:MayAct?"WASD / 方向键移动     E / 空格交互":"双模型观战";
+            if(Phase=="paused")msg=!string.IsNullOrEmpty(lobby.policy_fault)?lobby.policy_fault:
+                "房主 "+ReadyState(0)+(lobby.mode=="human_human"?"    来宾 "+ReadyState(1):"");
+            if(panel.height>=90)ui.Label(new Rect(329,y+59,887,24),msg,ui.Caption);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEditor.SceneManagement;
@@ -157,16 +158,16 @@ public static class SurfaceRefinementChecks {
     }
     public static void WhiteSteam() {
         EditorSceneManager.OpenScene("Assets/Scenes/Replay.unity");
-        var player=UnityEngine.Object.FindFirstObjectByType<ReplayPlayer>();player.Load("../../output/samples/asymmetric_advantages.ocrep.json");
+        var player=UnityEngine.Object.FindFirstObjectByType<ReplayPlayer>();player.Load(Path.Combine(Application.streamingAssetsPath,"Samples/asymmetric_advantages.ocrep.json"));
         int frame=Array.FindIndex(player.Data.frames,f=>Array.Exists(f.state.objects,o=>o.name=="soup"&&player.Data.header.terrain[o.position[1]][o.position[0]]=='P'));
         Require(frame>=0,"Steam fixture has no pot soup");
         var soup=Array.Find(player.Data.frames[frame].state.objects,o=>o.name=="soup"&&player.Data.header.terrain[o.position[1]][o.position[0]]=='P');
         foreach(bool ready in new[]{true,false}) {
             soup.is_ready=ready;soup.is_cooking=!ready;player.Seek(frame);
-            var bubbles=(System.Collections.Generic.List<Transform>)typeof(ReplayPlayer).GetField("steam",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance).GetValue(player);
-            Require(bubbles.Count>0,"Pot has no steam");
+            var bubbles=GameObject.Find("Kitchen").GetComponentsInChildren<Renderer>().Where(r=>r.name=="Steam").ToArray();
+            Require(bubbles.Length>0,"Pot has no steam");
             foreach(var bubble in bubbles) {
-                var c=bubble.GetComponent<Renderer>().sharedMaterial.color;
+                var c=bubble.sharedMaterial.color;
                 Require(c.r>.98f&&c.g>.98f&&c.b>.98f,"Pot steam is tinted instead of white: "+ColorUtility.ToHtmlStringRGB(c)+", ready="+ready);
             }
         }

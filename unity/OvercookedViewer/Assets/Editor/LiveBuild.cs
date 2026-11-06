@@ -28,6 +28,8 @@ public static class LiveBuild {
         InteractionHintChecks.Surfaces();
         ReplayCharacterChecks.Slots();
         CharacterTimingChecks.Run();
+        SimmerChecks.Run();
+        CafeFixtureChecks.Run();
         ReplayChecks.SerializerRegression();
         Directory.CreateDirectory("../../output");
         ReplayChecks.Run();

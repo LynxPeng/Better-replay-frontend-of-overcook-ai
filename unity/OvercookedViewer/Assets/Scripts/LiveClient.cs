@@ -34,6 +34,7 @@ public sealed partial class LiveClient : MonoBehaviour {
     float retryDeadline,retryAt,lastReceived,lobbyReceivedAt;
     public bool Reviewing { get; private set; }
     internal bool Spectating => lobby.mode=="ai_ai";
+    internal int ConfirmedTick => latestTick;
     internal bool ShowKitchen => !Reviewing && welcomed && latestTick>=0 && lobby.phase!="lobby";
     internal string Phase => lobby.phase??"";
     internal static bool Local(string value) => string.Equals(value,"localhost",StringComparison.OrdinalIgnoreCase)

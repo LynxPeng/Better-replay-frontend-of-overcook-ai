@@ -8,6 +8,8 @@ An independent Unity 3D replay viewer for [Overcooked-AI](https://github.com/Hum
 
 本功能分支新增 Windows 实时对局客户端 `OvercookedLive.exe`，支持人机、局域网双人和双模型观战。房主在本地上游工作区启动 Python 服务，访客直接运行客户端。构建、按键、模型和记录位置见 [实时对局使用说明](LIVE-QUICKSTART.md)。
 
+本分支的回放时间轴用金色刻度标出记录中的交付。可将滑块拖到刻度附近，用前后单步查看交付前后的状态和比分。右上角的昼夜按钮会同时切换厨房灯光和界面配色。
+
 四场完整对局与上游的逐步比对、Windows 双客户端断线重连及推理延迟结果见[本机验收记录](docs/LIVE_VALIDATION.md)。
 
 ## 下载即用 / Windows quick start

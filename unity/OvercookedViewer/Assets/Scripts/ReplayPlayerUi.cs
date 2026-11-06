@@ -12,7 +12,7 @@ public partial class ReplayPlayer {
         try {var path=NativeDialog.Open();if(path!=null)Load(path);}
         catch(Exception ex){error="无法打开文件选择器："+ex.Message;Debug.LogException(ex);}
     }
-    void OpenSettings(){if(Presentation!=null)Presentation.Pause();CancelCameraDrag();settings.Show(preferences);}
+    void OpenSettings(){if(!IsLive && Presentation!=null)Presentation.Pause();CancelCameraDrag();settings.Show(preferences);}
     void OnGUI() {
         if(ui==null)ui=new ReplayUiTheme();
         var previous=GUI.matrix;bool enabled=GUI.enabled;float scale=ReplayUiLayout.Scale(Screen.width),height=Screen.height/scale;
@@ -21,8 +21,11 @@ public partial class ReplayPlayer {
             ui.Fill(new Rect(0,0,294.4f,height),ui.Mist);
             ui.Fill(new Rect(294.4f,height*.83f,985.6f,height*.17f),ui.Mist);
             GUI.enabled=!settings.Open;
-            Sidebar(height);Toolbar();if(Clock!=null)Transport(height);
-            if(labels&&Clock!=null)Names(scale);
+            if(IsLive)live.Draw(ui,height);
+            else {Sidebar(height);if(Clock!=null)Transport(height);}
+            if(!IsLive||live.ShowKitchen)Toolbar();
+            if(labels&&Clock!=null&&(!IsLive||live.ShowKitchen))Names(scale);
+            if(live && live.Reviewing && ui.Click(new Rect(310,84,110,30),"返回联机房间"))live.EndReview();
             GUI.enabled=true;settings.Draw(ui,height,p=>ApplyPreferences(p,true));
         }finally{GUI.matrix=previous;GUI.enabled=enabled;}
     }
@@ -86,7 +89,7 @@ public partial class ReplayPlayer {
         if(ui.Click(new Rect(1134,25,122,32),"画面设置",ui.Toolbar))OpenSettings();
         if(!navigation.Locked) {
             ui.Panel(ReplayUiLayout.NavigationHint,dark:true);
-            ui.Label(new Rect(322,72,630,28),"滚轮缩放   Shift＋滚轮升降   WASD / 中键平移   右键调整俯仰",ui.White);
+            ui.Label(new Rect(322,72,630,28),IsLive && !live.Spectating?"滚轮缩放   Shift＋滚轮升降   中键平移   右键调整俯仰":"滚轮缩放   Shift＋滚轮升降   WASD / 中键平移   右键调整俯仰",ui.White);
         }
     }
     void SetView(KitchenView next){view=next;preferences.viewMode=(int)next;preferences.Save(ViewerPreferences.DefaultPath);ResetCamera();}

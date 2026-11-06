@@ -3,6 +3,43 @@ import asyncio
 from test_live_server import KEY, room_at
 
 
+def test_either_player_can_swap_only_in_an_unready_two_human_lobby(tmp_path):
+    async def run():
+        async with room_at(tmp_path) as (_, connect, _port):
+            host = await connect(host_token=KEY)
+            await host.get("welcome")
+            await host.send("swap")
+            await host.get("error")
+            await host.send("configure", mode="human_human")
+            await host.get("lobby", mode="human_human", host_slot=0)
+            await host.send("swap")
+            await host.get("error")
+            guest = await connect()
+            assert (await guest.get("welcome"))["slot"] == 1
+            await guest.send("swap")
+            await host.get("lobby", host_slot=1)
+            await guest.get("lobby", host_slot=1)
+            await guest.send("configure", layout="coordination_ring")
+            await guest.get("error")
+            await guest.send("ready", ready=True)
+            await host.get("lobby", ready1=True)
+            await host.send("swap")
+            await host.get("error")
+            await host.send("configure", host_slot=0)
+            await host.get("error")
+            await guest.send("ready", ready=False)
+            await host.get("lobby", ready1=False)
+            await host.send("ready", ready=True)
+            await guest.get("lobby", ready0=True)
+            await guest.send("swap")
+            await guest.get("error")
+            await host.send("ready", ready=False)
+            await host.get("lobby", ready0=False, ready1=False)
+            await host.send("swap")
+            await guest.get("lobby", host_slot=0)
+    asyncio.run(run())
+
+
 def test_valid_busy_seat_can_be_retried_after_old_stream_closes(tmp_path):
     async def run():
         async with room_at(tmp_path) as (_, connect, _port):

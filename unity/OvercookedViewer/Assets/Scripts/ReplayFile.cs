@@ -22,7 +22,9 @@ namespace OvercookedReplay
         public ReplayHeader header; public Frame[] frames; public Segment[] segments; public string[] diagnostics;
         public static ReplayFile Load(string path) { return Parse(File.ReadAllText(path)); }
         public static ReplayFile Parse(string json) {
-            var d=JsonUtility.FromJson<ReplayFile>(json);
+            return Validate(JsonUtility.FromJson<ReplayFile>(json));
+        }
+        internal static ReplayFile Validate(ReplayFile d) {
             if(d==null || d.header==null || d.header.schema_version!=1) throw new ArgumentException("不支持的回放文件版本");
             if(d.frames==null || d.frames.Length==0 || d.segments==null || d.frames.Length!=d.segments.Length+1)
                 throw new ArgumentException("回放状态与步骤数量不一致");

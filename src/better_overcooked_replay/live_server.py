@@ -333,6 +333,10 @@ class LiveServer:
             self.seats[slot] = None
             if self.phase == "lobby" and self.seats[1-slot]:
                 self.seats[1-slot].ready = False
+        elif cmd == "swap":
+            if self.phase != "lobby" or self.config.mode != "human_human" or not self.connected() or any(s.ready for s in self.seats):
+                raise ValueError("两位玩家都已加入人人大厅且均未准备时才能交换角色")
+            self.config = replace(self.config, host_slot=1 - self.config.host_slot)
         elif cmd == "ready" and self.phase in ("lobby", "paused"):
             seat.ready = boolean(msg.get("ready"), "ready")
         elif cmd == "pause" and self.phase in ("paused", "running"):
@@ -352,6 +356,8 @@ class LiveServer:
             cfg = self.config.updated(msg, self.catalog)
             if cfg.mode != "human_human" and self.seats[1] is not None:
                 raise ValueError("切换模式前请先退出第二个玩家")
+            if self.config.mode == cfg.mode == "human_human" and cfg.host_slot != self.config.host_slot:
+                raise ValueError("请使用大厅的交换角色操作")
             self.config = cfg
             self.clear_ready()
         elif cmd == "start" and self.phase == "lobby":

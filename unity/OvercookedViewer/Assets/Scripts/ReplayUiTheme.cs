@@ -23,8 +23,8 @@ public sealed class ReplayUiTheme {
     readonly GUIStyle paperPanel,darkPanel,softPanel,shadowPanel,rule;
     readonly Dictionary<Color,Texture2D> fills=new Dictionary<Color,Texture2D>();
     public ReplayUiTheme() {
-        var font=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei UI","Microsoft YaHei","Segoe UI"},18);
-        var numbers=Font.CreateDynamicFontFromOSFont(new[]{"Segoe UI","Microsoft YaHei UI"},24);
+        var font=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB","Heiti SC","Segoe UI","Arial"},18);
+        var numbers=Font.CreateDynamicFontFromOSFont(new[]{"Segoe UI","PingFang SC","Microsoft YaHei UI","Arial"},24);
         Text=Label(font,13,Ink);Caption=Label(font,11,Muted);Heading=Label(font,14,Marine,FontStyle.Bold);
         Title=Label(font,24,Marine,FontStyle.Bold);Score=Label(numbers,36,Marine,FontStyle.Bold);
         White=Label(font,13,Color.white);Name=Label(font,10,Color.white);Name.alignment=TextAnchor.MiddleCenter;

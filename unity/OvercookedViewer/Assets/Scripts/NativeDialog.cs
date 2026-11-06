@@ -1,5 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Text;
+using UnityEngine;
 
 namespace OvercookedReplay {
 public static class NativeDialog {
@@ -19,6 +22,38 @@ public static class NativeDialog {
     [DllImport("user32.dll",ExactSpelling=true)]static extern IntPtr GetActiveWindow();
 
     public static string Open() {
+        if(Application.platform==RuntimePlatform.OSXPlayer || Application.platform==RuntimePlatform.OSXEditor)
+            return OpenMac();
+        if(Application.platform!=RuntimePlatform.WindowsPlayer && Application.platform!=RuntimePlatform.WindowsEditor)
+            throw new PlatformNotSupportedException("文件选择器支持 Windows 和 macOS。");
+        return OpenWindows();
+    }
+
+    static string OpenMac() {
+        // Feed a fixed script through stdin; never interpolate selected paths into a shell.
+        var start=new ProcessStartInfo("/usr/bin/osascript","-") {
+            UseShellExecute=false,RedirectStandardInput=true,RedirectStandardOutput=true,
+            RedirectStandardError=true,CreateNoWindow=true,
+            StandardOutputEncoding=Encoding.UTF8,StandardErrorEncoding=Encoding.UTF8
+        };
+        using(var process=Process.Start(start)) {
+            if(process==null)throw new InvalidOperationException("无法启动 macOS 文件选择器。");
+            process.StandardInput.Write("try\nreturn POSIX path of (choose file with prompt \"选择 Overcooked 回放\")\non error number -128\nreturn \"\"\nend try\n");
+            process.StandardInput.Close();
+            var output=process.StandardOutput.ReadToEndAsync();
+            var error=process.StandardError.ReadToEndAsync();
+            process.WaitForExit();
+            return DecodeMacResult(process.ExitCode,output.GetAwaiter().GetResult(),error.GetAwaiter().GetResult());
+        }
+    }
+
+    static string DecodeMacResult(int exitCode,string output,string error) {
+        if(exitCode!=0)throw new InvalidOperationException("macOS 文件选择器错误："+error);
+        string path=output.TrimEnd('\r','\n');
+        return path.Length==0?null:path;
+    }
+
+    static string OpenWindows() {
         const int capacity=32768;
         IntPtr file=IntPtr.Zero,filter=IntPtr.Zero,title=IntPtr.Zero;
         try {

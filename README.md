@@ -22,6 +22,21 @@ An independent Unity 3D replay viewer for [Overcooked-AI](https://github.com/Hum
 
 支持已记录的 AI–AI、人–AI、人–人对局。本版是离线回放器，不包含实时联机。角色外观与训练编号无关；画面中的装饰不参与规则。
 
+## macOS 构建 / 预览版
+
+新增 macOS Universal（Apple Silicon arm64 + Intel x86_64）/ Mono 构建入口，使用 Metal 渲染、macOS 系统文件选择器和中文系统字体回退。回放文件与 Windows 版通用。使用说明见 [macOS 快速开始](MACOS-QUICKSTART.md)。**Windows 交叉编译不能替代真实 Mac 验收；当前 Mac 构建未完成 Developer ID 签名和 Apple 公证。**
+
+下载：[v0.1.1 macOS 预览版](https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.1.1-macos-preview)。构建和检查范围见 [验收记录](docs/MACOS_VALIDATION.md)。
+
+已有完整本地美术与生成场景后，在 Windows 的同版本 Unity Editor 安装 **macOS Build Support (Mono)**，关闭该工程的编辑器窗口，执行：
+
+```powershell
+.\scripts\build-macos.ps1
+python scripts/package-macos.py output/macOS/OvercookedReplay.app
+```
+
+输出应用 `output/macOS/OvercookedReplay.app`，以及保留 Unix 可执行权限的 `release/BetterReplay-macOS-Universal-v0.1.1-macos-preview.zip` 和 SHA256。打包脚本只需 Python 标准库，不需要安装训练依赖。在 Mac 本机也可使用同版本 Unity，通过 `-batchmode -buildTarget OSXUniversal -executeMethod MacBuild.Build -quit -projectPath <工程路径>` 构建；正式签名、公证需另行使用自己的 Apple 开发者身份完成。
+
 ## 怎样生成记录
 
 **仅观看不需要以下环境。**生成/转换记录使用 Python 3.10；示例在仓库根目录运行。源码工具包是 `better_overcooked_replay`，不会把模块写进上游 `overcooked_ai_py`。
@@ -115,7 +130,7 @@ tests/                  Python回归
 patches/                唯一的上游事件透传补丁
 ```
 
-Unity版本：6000.6.8f1、URP17.6，Windows x64/Mono。场景/Prefab/.meta和包锁纳入版本控制；Library、环境、训练输出、商店美术源文件及原始角色模型不上传。
+Unity版本：6000.6.8f1、URP17.6，Windows x64/Mono 与 macOS Universal/Mono。场景/Prefab/.meta和包锁纳入版本控制；Library、环境、训练输出、商店美术源文件及原始角色模型不上传。
 
 **源码重建与运行发行包的依赖不同。**重建完整场景需要自行取得并导入 Restaurant Bits for Unity、Cartoon Town和Synty Simple Sky，遵守各自许可；来源与目录见 [资源说明](unity/ASSET_SOURCES.md)。使用本仓库导入脚本时保留原.meta GUID。角色源模型与派生Prefab也需本地准备；没有本地角色会使用程序自制厨师。大肥鱼模型不属于MIT源码授权。
 

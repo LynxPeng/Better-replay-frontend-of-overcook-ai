@@ -7,6 +7,22 @@ using UnityEngine;
 using OvercookedReplay;
 
 public static class NativeDialogChecks {
+    public static void MacResults() {
+        var decode=typeof(NativeDialog).GetMethod("DecodeMacResult",BindingFlags.Static|BindingFlags.NonPublic);
+        if(decode==null)throw new Exception("macOS file dialog result handling is missing");
+        string selected="/Users/test/中文 replay/ file.ocrep.json ";
+        if((string)decode.Invoke(null,new object[]{0,selected+"\n",""})!=selected)
+            throw new Exception("macOS selection must retain Unicode and spaces, removing only its line terminator");
+        if(decode.Invoke(null,new object[]{0,"\n",""})!=null)
+            throw new Exception("Cancelling the macOS picker must return null");
+        try {
+            decode.Invoke(null,new object[]{1,"","dialog failed"});
+            throw new Exception("macOS picker errors must not be treated as cancellation");
+        } catch(TargetInvocationException e) {
+            if(!(e.InnerException is InvalidOperationException))throw;
+        }
+        Debug.Log("macOS native dialog result checks passed");
+    }
     public static void Abi() {
         var type=typeof(NativeDialog).GetNestedType("OpenFileName",BindingFlags.NonPublic);
         if(type==null || !type.IsValueType)throw new Exception("OPENFILENAME must be a blittable value type; managed class initialization recurses in player Mono");

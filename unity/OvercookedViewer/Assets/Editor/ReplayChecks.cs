@@ -40,7 +40,9 @@ public static class ReplayChecks
             clock.Advance(replay.frames[replay.frames.Length - 1].time + 1);
             if (clock.Index != replay.frames.Length - 1 || clock.Playing) throw new Exception("Terminal clock mismatch");
             assertions++;
-            if (replay.header.layout_name == "cramped_room" && replay.frames[replay.frames.Length-1].score != 20)
+            // Only the scripted one-delivery fixture ends at 20; the same layout
+            // also has a real upstream policy recording ending at 220.
+            if (Path.GetFileName(path) == "cramped_room.ocrep.json" && replay.frames[replay.frames.Length-1].score != 20)
                 throw new Exception("Last delivery lost");
         }
         string bad = "{\"header\":{\"schema_version\":77}}";

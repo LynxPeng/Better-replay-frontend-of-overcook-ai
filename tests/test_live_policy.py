@@ -104,3 +104,10 @@ def test_two_sp_slots_reproduce_upstream_game(tmp_path):
         assert score == 220
     finally:
         policies.close()
+    # Reloading models from a used room must not pickle the engine's recipe-keyed caches.
+    reloaded = catalog.prepare({0:"sp-cramped-room"}, mdp)
+    try:
+        assert reloaded.decide(env.state)[0] in range(6)
+        assert reloaded.diagnostics[0] == "ok"
+    finally:
+        reloaded.close()

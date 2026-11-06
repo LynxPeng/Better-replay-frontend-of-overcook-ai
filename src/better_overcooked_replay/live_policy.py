@@ -23,6 +23,28 @@ STAY = 4
 SAFE_ID = re.compile(r"[a-zA-Z0-9_-]{1,64}")
 
 
+def _mdp_settings(mdp):
+    # A used MDP has caches keyed by Recipe instances. Do not deserialize those
+    # objects in a spawned interpreter before its recipe configuration exists.
+    return dict(layout=mdp.mdp_params, recipes=mdp.recipe_config, old_dynamics=mdp.old_dynamics,
+                order_bonus=mdp.order_bonus, start_state=mdp.start_state.to_dict() if mdp.start_state else None)
+
+
+def _restore_mdp(settings):
+    from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, OvercookedState
+
+    recipes = dict(settings["recipes"])
+    layout = dict(settings["layout"])
+    layout["start_all_orders"] = recipes.pop("all_orders")
+    mdp = OvercookedGridworld(**layout, **recipes, old_dynamics=settings["old_dynamics"],
+                              order_bonus=settings["order_bonus"])
+    if settings["start_state"] is not None:
+        mdp.start_state = OvercookedState.from_dict(settings["start_state"])
+    if mdp.recipe_config != settings["recipes"] or mdp.mdp_params != settings["layout"]:
+        raise ValueError("Policy worker could not reproduce the room's layout and recipe configuration")
+    return mdp
+
+
 class ModelCatalog:
     def __init__(self, models_dir=None):
         self.paths = {"greedy": None}
@@ -65,9 +87,10 @@ class ModelCatalog:
         policies = LivePolicies()
         deadline = time.monotonic() + startup_timeout
         try:
+            settings = _mdp_settings(mdp)
             for index, model_id in slots.items():
                 # Sequential warmup also prevents simultaneous upstream planner cache writes.
-                policies.start(index, model_id, self.paths[model_id], mdp, horizon, seed + index, deadline)
+                policies.start(index, model_id, self.paths[model_id], settings, horizon, seed + index, deadline)
             return policies
         except BaseException:
             policies.close()
@@ -93,8 +116,9 @@ def _sb3_policy(path, horizon):
     raise ValueError(f"SB3 model requires square 84 or 128 pixel RGB observations, got {obs.shape}")
 
 
-def _policy_worker(channel, model_id, path, mdp, index, seed, horizon):
+def _policy_worker(channel, model_id, path, settings, index, seed, horizon):
     try:
+        mdp = _restore_mdp(settings)
         with recipe_context(mdp.recipe_config):
             if model_id == SP_ID:
                 policy = SelfPlayPolicy(path, mdp, index, seed, horizon)
@@ -145,10 +169,10 @@ class LivePolicies:
         self.lock = threading.Lock()
         self.closed = False
 
-    def start(self, index, model_id, path, mdp, horizon, seed, deadline):
+    def start(self, index, model_id, path, settings, horizon, seed, deadline):
         ctx = mp.get_context("spawn")
         host, child = ctx.Pipe()
-        process = ctx.Process(target=_policy_worker, args=(child, model_id, path, mdp, index, seed, horizon),
+        process = ctx.Process(target=_policy_worker, args=(child, model_id, path, settings, index, seed, horizon),
                               name=f"Overcooked policy {index}", daemon=True)
         try:
             process.start()

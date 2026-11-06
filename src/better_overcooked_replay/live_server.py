@@ -31,6 +31,10 @@ DEFAULT_PORT = 8765
 LOG = logging.getLogger(__name__)
 
 
+class ResumeBusy(ValueError):
+    """A valid returning seat still has its previous transport attached."""
+
+
 def packet(message):
     data = json.dumps(message, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
     if not 0 < len(data) <= MAX_PACKET:
@@ -191,6 +195,12 @@ class LiveServer:
             if seat:
                 self.send(seat.writer, message)
 
+    def report_host_error(self, description, exc):
+        for slot, seat in enumerate(self.seats):
+            if seat:
+                self.send(seat.writer, {"type": "error", "fatal": False,
+                                        "message": f"{description}：{exc}" if slot == 0 else description})
+
     def lobby(self):
         result = dict(type="lobby", phase=self.phase, **asdict(self.config), warming=self.warming,
                       policy_fault=self.policy_fault,
@@ -222,9 +232,11 @@ class LiveServer:
         peer = ipaddress.ip_address(writer.get_extra_info("peername")[0].split("%")[0])
         if token:
             idx = next((i for i, seat in enumerate(self.seats) if seat and secrets.compare_digest(seat.token, token)), None)
-            if idx is None or self.seats[idx].writer is not None or idx == 0 and not peer.is_loopback:
-                raise ValueError("重连凭据无效或席位已连接")
+            if idx is None or idx == 0 and not peer.is_loopback:
+                raise ValueError("重连凭据无效")
             seat = self.seats[idx]
+            if seat.writer is not None:
+                raise ResumeBusy("原连接仍在关闭，请稍后重试")
             if seat.missing_since is None or time.monotonic() - seat.missing_since >= self.grace:
                 raise ValueError("重连窗口已结束")
             seat.writer, seat.missing_since, seat.sequence = writer, None, -1
@@ -274,6 +286,8 @@ class LiveServer:
                     self.send(writer, {"type": "error", "message": str(exc), "fatal": False})
         except (asyncio.IncompleteReadError, ConnectionError, OSError, asyncio.TimeoutError):
             pass
+        except ResumeBusy as exc:
+            self.send(writer, {"type": "error", "message": str(exc), "fatal": True, "retryable": True})
         except (ValueError, KeyError, RecursionError) as exc:
             self.send(writer, {"type": "error", "message": str(exc), "fatal": True})
         finally:
@@ -300,16 +314,16 @@ class LiveServer:
         if cmd == "ping":
             self.send(seat.writer, {"type": "pong"})
             return
-        if cmd == "input":
+        if cmd in ("input", "cancel_input"):
             actor = self.config.host_slot if slot == 0 else 1 - self.config.host_slot
             if self.phase != "running" or actor in self.config.ai_slots() or msg.get("match_id") != self.match.match_id:
                 return
-            action = integer(msg.get("action"), "action", 0, 5)
+            action = 4 if cmd == "cancel_input" else integer(msg.get("action"), "action", 0, 5)
             seq = integer(msg.get("seq"), "seq", 0, 2147483647)
             tick = integer(msg.get("tick"), "tick", 1, self.config.horizon)
             if tick == self.tick + 1 and seq > seat.sequence:
                 seat.sequence = seq
-                if self.pending.get(actor) != 5:
+                if cmd == "cancel_input" or self.pending.get(actor) != 5:
                     self.pending[actor] = action
             return
         if cmd == "leave":
@@ -502,7 +516,7 @@ class LiveServer:
                     deadline = time.monotonic() + 1 / cfg.tick_rate
         except Exception as exc:
             LOG.exception("Live match failed")
-            self.broadcast(dict(type="error", fatal=False, message=str(exc)))
+            self.report_host_error("对局异常，详情见房主日志", exc)
             self.finish(False, "match_error")
         finally:
             if policies:
@@ -523,7 +537,7 @@ class LiveServer:
                 path = self.match.finish(complete, reason)
             except (OSError, ValueError) as exc:
                 LOG.exception("Could not finalize replay")
-                self.broadcast(dict(type="error", fatal=False, message=f"写入回放失败：{exc}"))
+                self.report_host_error("写入回放失败，详情见房主日志", exc)
         self.terminal = dict(type="end", complete=complete, reason=reason, tick=self.tick, frame=frame, record=path,
                              match_id=self.match.match_id if self.match else "")
         for slot, seat in enumerate(self.seats):

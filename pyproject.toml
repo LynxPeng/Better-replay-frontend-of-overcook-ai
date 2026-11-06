@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "better-overcooked-replay"
+version = "0.1.0"
+description = "Unity 3D replay frontend and snapshot recording tools for Overcooked-AI"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+license = {file = "LICENSE"}
+dependencies = [
+  "overcooked_ai @ git+https://github.com/HumanCompatibleAI/overcooked_ai.git@739950a079cdaed5a44fcc662efc40244c205d06",
+  "numpy==1.26.4", "opencv-python==4.11.0.86",
+]
+
+[project.optional-dependencies]
+import = ["pandas==2.2.3"]
+train = ["stable-baselines3==2.9.2", "torch==2.9.1"]
+test = ["pytest", "pandas==2.2.3", "stable-baselines3==2.9.2"]
+
+[project.scripts]
+better-overcooked-replay = "better_overcooked_replay.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["better_overcooked_replay*"]

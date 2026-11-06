@@ -1,0 +1,5 @@
+{
+  "name": "Overcooked.BlueFish",
+  "references": ["VRM10", "UniGLTF", "UniGLTF.Utils", "UniHumanoid"],
+  "autoReferenced": true
+}

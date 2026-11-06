@@ -1,0 +1,5 @@
+{
+  "name": "Overcooked.GuguGaga",
+  "references": ["Overcooked.BlueFish"],
+  "autoReferenced": true
+}

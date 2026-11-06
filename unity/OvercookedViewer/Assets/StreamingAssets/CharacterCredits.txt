@@ -1,0 +1,16 @@
+GuguGaga Penguin / Edmin Penguin
+Original mesh and textures: ilvoris
+https://sketchfab.com/3d-models/edmin-penguin-5492222ce85f42c49ad1359f21a54509
+Rig and face rig: photon (that one larry) / Professor_E12
+https://sketchfab.com/3d-models/gugugaga-penguin-3316abca27af45d4aeee41195ea7f69b
+License: Creative Commons Attribution 4.0 (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+Local modifications: scale/orientation, URP material adjustments, original body and facial animations for recorded replay.
+
+BlueFatFish / 蓝色小肥鱼Deepseek
+Model: 木子恶魔. Supplied via https://github.com/drliuhuan/dsh-plugin-vrmpet3d
+VRMPet3D resource permission: Copyright (c) 2026 drliuhuan and VRMPet3D contributors.
+Compiled-player distribution permission supplied by the publisher; full text in LICENSES/VRMPet3D-compiled-player-zh.txt.
+Model metadata is retained unchanged. No standalone model/source redistribution or ML-training rights are granted.
+Original replay animations and deterministic bone adapters: this project.
+No additional rights to the BlueFatFish model are granted by the source-code license.

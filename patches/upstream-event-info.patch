@@ -1,0 +1,11 @@
+diff --git a/src/overcooked_ai_py/mdp/overcooked_env.py b/src/overcooked_ai_py/mdp/overcooked_env.py
+--- a/src/overcooked_ai_py/mdp/overcooked_env.py
++++ b/src/overcooked_ai_py/mdp/overcooked_env.py
+@@ -352,6 +352,7 @@
+         # TODO: This can be further simplified by having all the mdp_infos copied over to the env_infos automatically
+         env_info["sparse_r_by_agent"] = mdp_infos["sparse_reward_by_agent"]
+         env_info["shaped_r_by_agent"] = mdp_infos["shaped_reward_by_agent"]
++        env_info["event_infos"] = mdp_infos["event_infos"]
+         env_info["phi_s"] = (
+             mdp_infos["phi_s"] if "phi_s" in mdp_infos else None
+         )

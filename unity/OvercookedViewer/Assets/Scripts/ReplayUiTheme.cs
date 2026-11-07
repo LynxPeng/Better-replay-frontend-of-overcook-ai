@@ -42,8 +42,8 @@ public sealed class ReplayUiTheme : System.IDisposable {
         var chosenInk=night?Hex("#25291E"):ivory;
         var chosenHover=night?Hex("#E0B480"):Hex("#32664F");
         trackColor=night?Hex("#647160"):Hex("#C1CDC1");progressColor=night?Gold:Marine;
-        font=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB","Heiti SC","Segoe UI","Arial"},18);
-        numbers=Font.CreateDynamicFontFromOSFont(new[]{"Bahnschrift","Avenir Next","Segoe UI","Arial"},24);
+        font=ViewerFont.Create();
+        numbers=ViewerFont.Create();
         Text=Label(font,13,Ink);Caption=Label(font,12,Muted);Heading=Label(font,14,heading,FontStyle.Bold);
         Title=Label(font,24,heading,FontStyle.Bold);Score=Label(numbers,36,heading,FontStyle.Bold);
         White=Label(font,13,Color.white);Name=Label(font,10,Color.white);Name.alignment=TextAnchor.MiddleCenter;

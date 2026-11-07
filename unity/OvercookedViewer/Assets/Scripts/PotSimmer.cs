@@ -61,7 +61,7 @@ internal sealed class PotSimmer {
     }
 
     static Material SteamMaterial() {
-        // Reuse the transparent URP shader variant already included for counter hints.
+        // Reuse the explicit transparent shader included for counter hints.
         var material = new Material(Resources.Load<Material>("Materials/InteractionHintBlue"));
         var texture = new Texture2D(48, 48, TextureFormat.RGBA32, true) {
             name = "Soft steam", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear,

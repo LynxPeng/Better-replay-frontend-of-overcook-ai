@@ -6,11 +6,15 @@ using UnityEngine.Rendering;
 namespace OvercookedReplay {
 // Menu illustrations use the very same Restaurant Bits mesh and palette seen in the kitchen.
 // Each is drawn once off screen. No preview objects or cameras join the playing scene.
-internal sealed class RecipeArtwork : IDisposable {
+public sealed class RecipeArtwork : IDisposable {
     readonly Dictionary<string, RenderTexture> icons = new Dictionary<string, RenderTexture>();
     Material ink;
     public Texture Find(string ingredient) {
         if (ingredient != "onion" && ingredient != "tomato") return null;
+        return Resources.Load<Texture2D>("RecipeIcons/"+ingredient);
+    }
+
+    public Texture Bake(string ingredient) {
         if (icons.TryGetValue(ingredient, out var cached)) return cached;
         var model = Resources.Load<GameObject>("RestaurantBits/Models/food_ingredient_" + ingredient);
         var atlas = Resources.Load<Texture2D>("RestaurantBits/Textures/restaurantbits_extra");

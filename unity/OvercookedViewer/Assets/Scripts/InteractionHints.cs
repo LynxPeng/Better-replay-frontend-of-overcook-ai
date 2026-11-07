@@ -34,10 +34,8 @@ public sealed class InteractionHints : MonoBehaviour {
         }
     }
     public static Material Tint(Color colour){
-        var mat=new Material(Shader.Find("Universal Render Pipeline/Unlit"));mat.name="Interaction target tint";
-        mat.SetColor("_BaseColor",colour);mat.SetFloat("_Surface",1);mat.SetFloat("_Blend",0);
-        mat.SetFloat("_SrcBlend",(float)BlendMode.SrcAlpha);mat.SetFloat("_DstBlend",(float)BlendMode.OneMinusSrcAlpha);
-        mat.SetFloat("_ZWrite",0);mat.SetFloat("_Cull",(float)CullMode.Off);mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        var mat=new Material(Resources.Load<Shader>("InteractionSurface"));mat.name="Interaction target tint";
+        mat.SetColor("_BaseColor",colour);
         mat.renderQueue=(int)RenderQueue.Transparent+5;return mat;
     }
     static Mesh Shape(int side){

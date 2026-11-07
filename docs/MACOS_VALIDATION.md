@@ -1,5 +1,19 @@
 # macOS preview validation
 
+## 0.1.3 — 2026-11-07
+
+Addresses Apple Silicon feedback reporting invisible Chinese UI/recipe illustrations and a black/magenta checkerboard on worktop tops. The exact failing Metal variant could not be established without a device log; Mac visual acceptance remains pending.
+
+- Chinese UI and role names now load the embedded Noto Sans CJK SC Regular font, with font data included. All required Chinese glyphs pass the resource check. The font and SIL OFL license are shipped together.
+- Recipe icons are baked from the same local models at build time and loaded as uncompressed transparent PNG textures. Runtime menu rendering no longer depends on a mesh CommandBuffer/RenderTexture path on Metal.
+- The interaction overlay above each worktop and cooking steam use an explicit, resource-referenced, single-pass transparent shader. It has no URP Unlit keyword-variant dependency. Serialized blue/orange materials reference it directly.
+- Unity cross-build returned exit 0. Resource checks, settings checks, simmer/fixture checks, 1367 replay assertions and both character checks passed. Same-source Windows capture verified Chinese text, both ingredients, mixed recipes and a highlighted worktop; this verifies Windows rendering only.
+- Universal arm64/x86_64 verified for all six native binaries. Seven replay samples passed protocol validation and ZIP byte comparison; the upstream sample ends at 220 with 400 steps and 401 frames. ZIP CRC and Unix executable permissions passed.
+- Archive: `BetterReplay-macOS-Universal-v0.1.3-macos-preview.zip`, 102,268,215 bytes.
+- SHA256: `d899c9beacbce63e805a0867b0782b1ccbf802adc1490a2bb09d6834281928b9`.
+
+No real Mac runtime, Metal appearance, signing or notarization verification is claimed for this corrective preview.
+
 ## 0.1.2 — 2026-11-07
 
 Windows cross-build succeeded with Unity 6000.6.8f1, Mono and Metal. Real Mac runtime and visual acceptance remain pending. The app has no Developer ID signature or Apple notarization.

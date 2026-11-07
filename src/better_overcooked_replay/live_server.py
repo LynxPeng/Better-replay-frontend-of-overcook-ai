@@ -583,7 +583,7 @@ class LiveServer:
         await asyncio.sleep(0)
 
 
-async def serve(args):
+async def serve(args, shutdown_event=None):
     from .live_policy import ModelCatalog
     token = args.host_token_file.read_text(encoding="utf-8-sig").strip()
     room = LiveServer(token, args.records, ModelCatalog(args.models))
@@ -599,7 +599,7 @@ async def serve(args):
             signal.signal(sig, lambda *_: loop.call_soon_threadsafe(room.closing.set))
     print(f"Live server listening on {args.bind}:{port}", flush=True)
     try:
-        while not room.closing.is_set():
+        while not room.closing.is_set() and not (shutdown_event and shutdown_event.is_set()):
             if args.stop_file and args.stop_file.exists():
                 break
             await asyncio.sleep(.2)
@@ -607,7 +607,7 @@ async def serve(args):
         await room.close()
 
 
-def main(argv=None):
+def main(argv=None, shutdown_event=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -619,7 +619,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not args.host_token_file:
         parser.error("--host-token-file is required")
-    asyncio.run(serve(args))
+    asyncio.run(serve(args, shutdown_event))
 
 
 if __name__ == "__main__":

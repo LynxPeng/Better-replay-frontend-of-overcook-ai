@@ -1,5 +1,7 @@
 # Windows 实时对局
 
+便携联机包的房主与访客均可双击 `OvercookedLive.exe`，在首页创建或加入房间。包内已附房主服务、CPU 运行库和试玩模型。[便携版使用说明](LIVE-PORTABLE-QUICKSTART.md)
+
 两位厨师共享一间厨房和团队得分。每秒执行两次联合动作，每局 400 步，有效游玩时长 3 分 20 秒。房主电脑运行游戏规则和 AI，访客电脑只运行 Windows 客户端。
 
 ## 房主开局
@@ -55,3 +57,5 @@ SP 检查点和 PPO 权重均可选。启动器分别准备已有的文件，并
 ```
 
 独立检出播放器功能分支时，可直接用它的 `scripts/start-live-host.ps1 -Workspace <本地上游工作区>` 指定 conda、模型、客户端和记录所在工作区。运行程序位于 `output/Live/OvercookedLive.exe`。
+
+构建完整便携包时，在本地上游工作区用 PowerShell 7 和项目 `.conda` 环境将 `pyinstaller==6.16.0` 安装到 `output/live-package-tools`。用 `scripts/build-live-host.ps1` 构建独立房主程序，再用 `scripts/package-live-complete.ps1` 将该程序、客户端、`output/live-models` 中的 PPO 与 SP 模型和署名打包。两个脚本的 `-Workspace` 均指向上游工作区。验收时将 ZIP 解压到独立路径，用 `scripts/check-live-players.py --portable` 验证实际程序的开房与对局。

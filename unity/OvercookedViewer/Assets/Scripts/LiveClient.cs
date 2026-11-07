@@ -55,6 +55,7 @@ public sealed partial class LiveClient : MonoBehaviour {
     void Start() {
         Application.runInBackground=true;
         player=GetComponent<ReplayPlayer>();
+        FindPortableHost();
         string target=Argument("--live-address");
         portText=Argument("--live-port")??portText;nickname=Argument("--live-name")??nickname;
         if(!string.IsNullOrEmpty(target)) {
@@ -65,6 +66,9 @@ public sealed partial class LiveClient : MonoBehaviour {
             }
             SetupSmoke();
             Connect(false);
+        } else if(Argument("--portable-host")=="1") {
+            SetupSmoke();
+            CreateLocalRoom();
         }
     }
     void Connect(bool resume) {
@@ -77,7 +81,7 @@ public sealed partial class LiveClient : MonoBehaviour {
             resumeToken=null;sequence=0;latestTick=-1;dirty=false;applying=false;result=null;host=false;slot=-1;
             lobby=new LiveMessage();retrying=false;Reviewing=false;
             seatKey=LiveResume.Key(address,port,nickname.Trim(),Local(address)&&!string.IsNullOrEmpty(hostToken));
-            if(smoke==null)resumeToken=LiveResume.Read(seatKey);
+            if(smoke==null && localRoom==null)resumeToken=LiveResume.Read(seatKey);
             resume=!string.IsNullOrEmpty(resumeToken);
         }
         connection=new LiveConnection();welcomed=false;error="";
@@ -95,11 +99,15 @@ public sealed partial class LiveClient : MonoBehaviour {
         if(canResume && !string.IsNullOrEmpty(resumeToken) && result==null) {
             if(!retrying)retryDeadline=Time.realtimeSinceStartup+30;
             retrying=true;retryAt=Time.realtimeSinceStartup+1;connectionStatus="连接中断，正在重连…";
-        } else {retrying=false;resumeToken=null;LiveResume.Forget(seatKey);connectionStatus=reason;}
+        } else {
+            retrying=false;resumeToken=null;LiveResume.Forget(seatKey);connectionStatus=reason;
+            if(localRoom!=null)StopLocalRoom();
+        }
         error=reason;
     }
     void Update() {
         float now=Time.realtimeSinceStartup;
+        PollLocalRoom(now);
         if(retrying&&now>=retryDeadline)Disconnect("重连已超时，请重新加入房间",false);
         if(retrying&&connection==null&&now>=retryAt)Connect(true);
         if(connection!=null) {
@@ -118,7 +126,7 @@ public sealed partial class LiveClient : MonoBehaviour {
             && (Phase=="running"||Phase=="paused"))Send(new LivePause{type="pause",paused=Phase=="running"});
         if(!Reviewing && welcomed && latestTick>=0 && lobby.phase=="running" && MayAct)ReadInput();
     }
-    void OnDestroy(){connection?.Dispose();}
+    void OnDestroy(){connection?.Dispose();StopLocalRoom();}
     void OnApplicationFocus(bool focused) {
         if(!focused){focusBlocked=true;Neutralize();}
     }

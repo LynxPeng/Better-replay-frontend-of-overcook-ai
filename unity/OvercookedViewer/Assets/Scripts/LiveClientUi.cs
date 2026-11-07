@@ -46,6 +46,7 @@ public sealed partial class LiveClient {
     void LeaveRoom() {
         LiveResume.Forget(seatKey);
         if(welcomed)connection?.Leave();else connection?.Dispose();
+        StopLocalRoom();
         connection=null;welcomed=false;slot=-1;retrying=false;resumeToken=null;hostToken=null;
         result=null;latestTick=-1;lobby=new LiveMessage();ResetInput();Reviewing=false;error="";
         if(player.Presentation!=null)player.Presentation.Pause();
@@ -172,10 +173,10 @@ public sealed partial class LiveClient {
         }
         DrawLobbyPortrait(ui,new Rect(36,top,432,cardHeight));
         ui.Panel(new Rect(484,top,760,cardHeight));
-        ui.Label(new Rect(512,top+18,700,47),welcomed?"开局准备":"加入局域网厨房",display);
+        ui.Label(new Rect(512,top+18,700,47),welcomed?"开局准备":CanCreateRoom?"创建或加入房间":"加入局域网厨房",display);
         ui.Rule(512,top+78,704);
         float available=Mathf.Max(100,cardHeight-102);
-        float content=welcomed?454:connection!=null || retrying || !string.IsNullOrEmpty(error)?365:289;
+        float content=welcomed?454:connection!=null || retrying || StartingLocalRoom || !string.IsNullOrEmpty(error)?365:289;
         lobbyScroll=GUI.BeginScrollView(new Rect(508,top+90,716,available),lobbyScroll,new Rect(0,0,689,content),
             false,false,GUIStyle.none,ui.ScrollTrack);
         try {
@@ -199,7 +200,8 @@ public sealed partial class LiveClient {
         if(welcomed) {
             GUI.Label(new Rect(area.x+22,y+62,area.width-44,Mathf.Max(28,area.yMax-y-119)),network,lightWrap);
         }
-        if((connection!=null||retrying)&&ui.Click(new Rect(area.x+20,area.yMax-53,144,32),"离开房间",ui.Selected))LeaveRoom();
+        if((connection!=null||retrying||StartingLocalRoom)&&ui.Click(new Rect(area.x+20,area.yMax-53,144,32),
+            StartingLocalRoom?"取消创建":"离开房间",ui.Selected))LeaveRoom();
     }
     string WriteIn(ReplayUiTheme ui,Rect rect,string key,string value,int limit) {
         GUI.SetNextControlName(key);
@@ -216,10 +218,11 @@ public sealed partial class LiveClient {
         ui.Label(new Rect(5,94,625,22),"可直接粘贴房主大厅显示的 IP:端口",ui.Caption);
         ui.Label(new Rect(5,139,400,24),"你的昵称",ui.Heading);
         nickname=WriteIn(ui,new Rect(5,170,435,45),"live-name",nickname,24);
-        bool enabled=GUI.enabled;GUI.enabled=enabled && connection==null && !retrying;
-        if(ui.Click(new Rect(5,240,245,44),retrying?"正在重连":connection!=null?"正在连接":"加入房间",ui.Primary))Connect(false);
+        bool enabled=GUI.enabled;GUI.enabled=enabled && connection==null && !retrying && !StartingLocalRoom;
+        if(CanCreateRoom && ui.Click(new Rect(5,240,213,44),StartingLocalRoom?"正在创建…":"创建房间",ui.Primary))CreateLocalRoom();
+        if(ui.Click(new Rect(CanCreateRoom?230:5,240,216,44),retrying?"正在重连":connection!=null?"正在连接":"加入房间",CanCreateRoom?ui.Selected:ui.Primary))Connect(false);
         GUI.enabled=enabled;
-        if(retrying||connection!=null||!string.IsNullOrEmpty(error))
+        if(retrying||connection!=null||StartingLocalRoom||!string.IsNullOrEmpty(error))
             ui.Label(new Rect(5,294,625,63),string.IsNullOrEmpty(error)?connectionStatus:error,wrapped);
     }
     static readonly string[] LobbyModes={"human_ai","human_human","ai_ai"};

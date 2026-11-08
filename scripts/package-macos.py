@@ -82,7 +82,7 @@ def archive_app(app, destination, extras=()):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("app", type=Path)
-    parser.add_argument("--version", default="v0.1.1-macos-preview")
+    parser.add_argument("--version", default="v0.1.3-macos-preview")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]

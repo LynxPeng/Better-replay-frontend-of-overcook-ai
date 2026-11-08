@@ -15,7 +15,7 @@ public sealed class BlueFishShowcase : MonoBehaviour {
     GUIStyle heading,label,button,toggle;Font font;
     static readonly string[] Names={"待机 · oh 与眨眼","走路 · 重心摆动","端盘行走","拿起食物","放下食物","开心交付 · 跳一下","搅拌烹饪","回头张望"};
     void Start() {
-        font=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Arial"},20);
+        font=ViewerFont.Create();
         if(!actor&&!AlternateActor)actor=FindFirstObjectByType<BlueFishActor>();
         tableProp=KitchenFactory.Item("dish",null,new Vector3(0,.37f,.65f),.26f).transform;
         pot=new GameObject("Demo cooking pot").transform;KitchenFactory.RestaurantProp("pot_A",pot,.32f,new Vector3(0,.36f,.65f));

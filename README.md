@@ -1,149 +1,138 @@
-# Better replay frontend of overcook-ai
+<div align="center">
 
-An independent Unity 3D replay viewer for [Overcooked-AI](https://github.com/HumanCompatibleAI/overcooked_ai). Python computes the game; Unity presents recorded snapshots. This is a community project, not an official Overcooked or HumanCompatibleAI product.
+<h1>Better replay frontend of overcook-ai</h1>
 
-![Replay viewer](docs/images/main-final.png)
+<p>把 Overcooked-AI 对局搬进 3D 厨房。回看智能体的配合，或在 Windows 上开房一起做菜。</p>
 
-[查看画面设置界面](docs/images/settings-final.png)
+<p>
+  <a href="https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.2.0-live-windows-preview"><img src="https://img.shields.io/badge/Windows_Live-v0.2.0_preview-205A48" alt="Windows 联机预览 v0.2.0"></a>
+  <a href="https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.1.3-macos-preview"><img src="https://img.shields.io/badge/macOS_Replay-v0.1.3_preview-205A48" alt="macOS 回放预览 v0.1.3"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Source-MIT-6B5133" alt="源码采用 MIT 许可证"></a>
+</p>
 
-## 下载即用 / Windows quick start
+</div>
 
-从本仓库 **Releases** 下载 `BetterReplay-Windows-x64-*.zip`，完整解压到任意可写目录，双击 `OvercookedReplay.exe`。无需安装 Python、Unity Editor、conda，也无需下载模型或美术包。**必须保留同目录的 `_Data`、`MonoBleedingEdge`、DLL 和其他文件，不能只复制 exe。**
+[下载与快速开始](#下载与快速开始) · [界面展示](docs/SHOWCASE.md) · [实时联机](#实时联机) · [怎样生成记录](#怎样生成记录) · [源码结构和重建](#源码结构和重建)
 
-这是 Windows x64 便携发行包，不修改系统安装目录。建议 Windows 10/11 和支持 Direct3D 11/12 的显卡。源码 ZIP 不是可运行发行包。
+<a id="下载即用--windows-quick-start"></a>
 
-程序左侧“打开本地回放”选择 `.ocrep.json`，或展开“示例厨房”。下方提供重播、前后单步、播放/暂停、时间轴、0.25×–4×倍速；空格播放暂停，左右方向键逐步。右上角切换白天/夜晚和画面设置，可调分辨率、窗口/无边框、MSAA、渲染倍率、帧率、镜头俯角。Esc取消设置。
+## 下载与快速开始
 
-点击“镜头已锁定”解锁后，鼠标在3D区域内：滚轮缩放，Shift+滚轮升降，WASD/中键平移，右键上下拖动调整俯仰；工具栏可旋转90°及复位。中文路径受支持。命令行：
+| 用途 | 下载与启动 |
+| --- | --- |
+| **联机**<br>Windows | [x64 预览 v0.2.0][live-zip] · 约 356 MiB<br>打开 `OvercookedLive.exe` |
+| **回放**<br>Windows | [x64 离线版 v0.1.0][win-zip] · 约 79 MiB<br>打开 `OvercookedReplay.exe` |
+| **回放**<br>macOS | [Universal 预览 v0.1.3][mac-zip] · 约 98 MiB<br>打开 `OvercookedReplay.app` |
 
-```powershell
-.\OvercookedReplay.exe --replay "D:\对局\my-game.ocrep.json"
-```
+完整解压后从解压目录打开程序，保留同目录的配套文件。发行包已附运行库、美术和示例，联机包还附房主服务与 CPU 模型。各版本的校验文件与验收范围见 [Releases][releases]。
 
-支持已记录的 AI–AI、人–AI、人–人对局。本版是离线回放器，不包含实时联机。角色外观与训练编号无关；画面中的装饰不参与规则。
+[![夜间 3D 厨房回放，左侧显示订单和比分，底部时间轴标记交付事件](docs/images/main-final.png)](docs/SHOWCASE.md#回放与交付)
 
-## macOS 构建 / 预览版
+*当前源码分支的夜间回放，取自上游模型的 220 分对局。点击画面查看白天回放和界面细节。*
 
-新增 macOS Universal（Apple Silicon arm64 + Intel x86_64）/ Mono 构建入口，使用 Metal 渲染、macOS 系统文件选择器和中文系统字体回退。回放文件与 Windows 版通用。使用说明见 [macOS 快速开始](MACOS-QUICKSTART.md)。**Windows 交叉编译不能替代真实 Mac 验收；当前 Mac 构建未完成 Developer ID 签名和 Apple 公证。**
+**第一次看回放**，展开左侧的厨房列表，选择 `upstream-sp-220`，再点「播放」。这是内置的上游自博弈对局，共 400 步、401 个状态帧，最终得分 220。观看自己的对局时，点「打开本地回放」，选择 `.ocrep.json`。
 
-下载：[v0.1.1 macOS 预览版](https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.1.1-macos-preview)。构建和检查范围见 [验收记录](docs/MACOS_VALIDATION.md)。
+- **回放定位**可用空格播放或暂停、左右方向键逐步、时间轴跳转，以及 0.25× 至 4× 倍速。当前源码分支的金色刻度标记实际交付，便于对比前后状态与比分。
+- **画面与镜头**可切换昼夜。解锁镜头后，滚轮缩放，Shift 加滚轮升降，WASD 或中键平移，右键拖动调整俯仰。[画面设置预览](docs/SHOWCASE.md#画面设置)
+- **Windows 离线包**适用于 Windows 10/11 x64 与 Direct3D 11/12。[Windows 回放使用说明](WINDOWS-QUICKSTART.md)
+- **macOS 预览**包含 Apple Silicon 和 Intel 双架构，并内置中文字体。v0.1.3 的实际 Metal 画面仍待 Mac 实机验收。[macOS 使用说明](MACOS-QUICKSTART.md)
 
-已有完整本地美术与生成场景后，在 Windows 的同版本 Unity Editor 安装 **macOS Build Support (Mono)**，关闭该工程的编辑器窗口，执行：
+## 实时联机
 
-```powershell
-.\scripts\build-macos.ps1
-python scripts/package-macos.py output/macOS/OvercookedReplay.app
-```
+房主和来宾都打开 `OvercookedLive.exe`。房主点击「创建房间」，在大厅选模式，应用设置并准备，再点「开始对局」。[查看联机大厅](docs/SHOWCASE.md#联机大厅)
 
-输出应用 `output/macOS/OvercookedReplay.app`，以及保留 Unix 可执行权限的 `release/BetterReplay-macOS-Universal-v0.1.1-macos-preview.zip` 和 SHA256。打包脚本只需 Python 标准库，不需要安装训练依赖。在 Mac 本机也可使用同版本 Unity，通过 `-batchmode -buildTarget OSXUniversal -executeMethod MacBuild.Build -quit -projectPath <工程路径>` 构建；正式签名、公证需另行使用自己的 Apple 开发者身份完成。
+| 大厅模式 | 怎么用 |
+| --- | --- |
+| **人人联机** | 房主将大厅显示的 `IPv4:端口` 发给同一局域网的朋友。朋友在首页填入地址并点「加入房间」，双方准备后由房主开始。 |
+| **人机合作** | 选择自己的席位，为另一名厨师选 Greedy、内置 PPO 或上游 SP。SP 预设使用拥挤厨房和旧烹饪规则。 |
+| **机机观战** | 为两个席位分别选模型。两个席位可以各自运行同一个模型的独立实例。 |
+
+WASD 或方向键移动，E 或空格交互，Esc 暂停。默认一局 400 步、每秒 2 步。结算后可点「回看本局」，对局记录保存在房主电脑。访客断线后有 30 秒恢复原席位。
+
+便携包已在 Windows 解压验收。双人使用同机双客户端完成断线重连，人机使用包内 PPO，双 SP 跑完 400 步并得到 220 分。跨两台实体电脑的联机仍待实测。[便携版使用说明和录像位置](LIVE-PORTABLE-QUICKSTART.md) · [联机开发与验证](docs/LIVE_VALIDATION.md)
 
 ## 怎样生成记录
 
-**仅观看不需要以下环境。**生成/转换记录使用 Python 3.10；示例在仓库根目录运行。源码工具包是 `better_overcooked_replay`，不会把模块写进上游 `overcooked_ai_py`。
+发行包可直接观看。下面的 Python 路径适合想把**自己的智能体或已有轨迹**接入播放器的人。准备 **Python 3.10** 和 **Git**，在本仓库根目录打开 PowerShell，执行以下命令。
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[import]"
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe examples\record_episode.py
+.\.venv\Scripts\python.exe -m better_overcooked_replay validate output\my-game.ocrep.json
 ```
 
-安装会使用固定上游提交 `739950a079cdaed5a44fcc662efc40244c205d06`。原有 Overcooked-AI 环境可使用 `pip install -e . --no-deps`，自行保证依赖版本匹配。不要为了播放而安装已弃用的 RLlib/TensorFlow。
+示例用随机动作生成一场 400 步记录。在回放器中打开 `output/my-game.ocrep.json` 即可检查结果。[完整记录示例](examples/record_episode.py)
 
-### 方式一：记录你自己的环境
+### 接入你自己的智能体
 
-完整例子在 [examples/record_episode.py](examples/record_episode.py)：
+在初态创建 `ReplayRecorder`，让两名智能体基于**同一个状态**选择动作。每次联合动作只调用一次 `env.step()`，随后把动作、新状态、奖励和 `info` 写入记录器。保存最后一帧后再重置环境。完整对局包含 **T 步和 T+1 帧**，提前结束时用 `complete=False`。展示时间由 `tick_rate` 决定，团队得分使用稀疏奖励，塑形奖励单独保存。
+
+### 转换旧轨迹或生成样例
+
+支持上游标准轨迹字典 JSON/pickle、网页 demo 的 `result.pkl`、人类 CSV 与 pickled DataFrame。人类数据使用 `.[import]` 额外依赖。只导入来源可信的 pickle。已有上游环境可用 `pip install -e . --no-deps` 安装工具，但需要自行匹配依赖版本。
 
 ```powershell
-python examples/record_episode.py
-python -m better_overcooked_replay validate output/my-game.ocrep.json
+# 在已有 rollouts.pkl 时转换。若采集时使用旧烹饪规则，将 new 改为 old
+.\.venv\Scripts\python.exe -m better_overcooked_replay convert rollouts.pkl --out output\imported --dynamics new
+
+# 从环境生成内置样例
+.\.venv\Scripts\python.exe -m better_overcooked_replay samples --out output\samples
 ```
 
-例子使用随机动作，仅演示记录，不代表训练好的策略。把例子中的 `joint_action` 换成你的两个 Agent 对同一状态产生的动作即可。核心写法：
+采集上游轨迹时，使用 `env.get_rollouts(agent_pair, num_games=1, final_state=True)` 保留终态。裸 `run_agents()` 输出需先整理成标准轨迹字典。
 
-```python
-from better_overcooked_replay import ReplayRecorder
+<details>
+<summary>历史轨迹的缺帧、终态和事件</summary>
 
-recorder = ReplayRecorder(mdp, env.state, {"horizon": 400, "tick_rate": 6})
-done = False
-while not done:
-    joint_action = (agent0_action, agent1_action)  # 原生动作，例如 (0,-1) 或 "interact"
-    next_state, reward, done, info = env.step(joint_action)
-    recorder.append(joint_action, next_state, reward, info)
-recorder.write("my-game.ocrep.json", complete=True)
-```
+转换器保留已有时间戳，多局输入会拆成多个文件。缺帧作为间隔标记，末态只有在显式规则下验证过状态转移与奖励后才补算。验证失败时保留到最后已知状态，把未恢复的动作写入诊断。只有视频、RGB 图像或得分时，缺少重建 3D 对局所需的状态。
 
-先保存初态，再在**每次 step 后、reset 前**保存新状态；T 次动作必须有 T+1 帧。提前停止用 `complete=False`。默认6逻辑步/秒仅决定展示时长，不限制训练吞吐量；按实际情况设置 `tick_rate`。得分用稀疏奖励，塑形奖励分开记录。动作顺序为上、下、右、左、等待、交互，转换器也接受原生动作向量。
+历史导入主要根据状态变化推断事件，交付音效和庆祝可能缺失。需要完整交互事件时，优先直接记录 `env.step()`。
 
-### 方式二：使用上游原记录器
-
-```python
-import pickle
-trajectory = env.get_rollouts(agent_pair, num_games=1, final_state=True)
-with open("rollouts.pkl", "wb") as stream:
-    pickle.dump(trajectory, stream)
-```
-
-```powershell
-python -m better_overcooked_replay convert rollouts.pkl --out output/imported --dynamics new
-```
-
-旧烹饪规则使用 `--dynamics old`，不要为了补终态猜测规则。支持标准轨迹字典 JSON/pickle、网页 demo result.pkl、人类 CSV/ pickled DataFrame；多局会拆成多个文件。`run_agents()` 的裸数组需要先整理成标准轨迹字典。仅可信的本地 pickle 可导入；Unity 不反序列化 pickle。
-
-**历史记录限制：**没有终态时，仅在显式规则下验证已有状态转移及奖励一致后补算；验证失败停在最后已知状态，缺失末尾动作写入诊断。缺帧直接跳转，不伪造动作或奖励。有时间戳时保留间隔，无时间戳默认6步/秒。只有视频/RGB/训练得分而没有状态，无法还原3D。历史导入目前根据前后状态推断事件，可能缺少完整交付音效和庆祝；即使原轨迹 info 中有事件，当前转换器也未完整利用它。要求完整演出时使用方式一。
-
-### 方式三：生成内置示例
-
-```powershell
-python -m better_overcooked_replay samples --out output/samples
-```
-
-`cramped_room` 示例从标准初态完成20分交付；其他布局的演示可能使用明确的自定义有效初态。发行包另含一场上游 SP 检查点推理生成的400步/220分记录。生成样例不要求训练或启动Unity。
+</details>
 
 ## 特别说明：上游源码的一行补丁
 
-本工具包不会自动修改上游。建议在上游 `src/overcooked_ai_py/mdp/overcooked_env.py` 的 `_prepare_info_dict` 中，在奖励透传后添加：
+Python 运行 [Overcooked-AI][upstream] 的规则并产生状态，Unity 用状态渲染人物、厨房和动画。工具依赖固定的上游提交 `739950a079cdaed5a44fcc662efc40244c205d06`，记录工具使用独立包 `better_overcooked_replay`。
 
-```python
-env_info["sparse_r_by_agent"] = mdp_infos["sparse_reward_by_agent"]
-env_info["shaped_r_by_agent"] = mdp_infos["shaped_reward_by_agent"]
-env_info["event_infos"] = mdp_infos["event_infos"]  # 仅这一行是新增
-```
+如果希望记录器获得准确的拾取、入锅和交付事件，可选用 [事件透传补丁](patches/upstream-event-info.patch)。它在上游 `_prepare_info_dict` 中添加 `env_info["event_infos"] = mdp_infos["event_infos"]`，将 MDP 已计算的事件交给记录器。仅使用基础状态和得分时，可直接使用上游环境。事件缺失时，交付专属提示音和庆祝可能缺失。
 
-补丁文件在 [patches/upstream-event-info.patch](patches/upstream-event-info.patch)。在固定版本的上游仓库中：
+在本仓库根目录用 PowerShell 执行，先把 `$upstream` 改为固定版本的上游检出目录。
 
 ```powershell
-git apply --check path/to/upstream-event-info.patch
-git apply path/to/upstream-event-info.patch
+$upstream = "C:\path\to\overcooked_ai"
+$patch = (Resolve-Path .\patches\upstream-event-info.patch).Path
+git -C $upstream apply --check $patch
+if ($LASTEXITCODE -eq 0) { git -C $upstream apply $patch }
 ```
-
-**它做什么：**MDP已经计算出交互事件；这一行把事件放进 `env.step()` 返回的 `info`，让记录器获取准确的拾取、入锅、交付等事件。不改变状态转移、碰撞、动作、烹饪或稀疏奖励，不是修改训练算法。
-
-**如果不加：**环境、训练和记录仍可以运行，Unity仍能显示状态、物品、烹饪进度和得分。记录器会根据状态变化推导一部分事件，但不能完整替代原事件，例如交付可能仅被推断成放下汤；因此交付专属动作、提示音和庆祝可能缺失。状态/得分正确不等于演出事件完整。添加补丁不能补回已经丢失的历史事件，也不会让当前历史导入器自动使用所有 ep_infos。
 
 ## 源码结构和重建
 
-```text
-unity/OvercookedViewer/   Unity工程、UI、场景、材质、角色动画和导入/构建工具
-src/better_overcooked_replay/  协议、记录、转换、观察及可选训练适配
-examples/               接入现有环境的最小示例
-tests/                  Python回归
-patches/                唯一的上游事件透传补丁
-```
+| 目录 | 用途 |
+| --- | --- |
+| [`unity/OvercookedViewer/`](unity/OvercookedViewer) | Unity 场景、回放与联机界面、角色和构建入口 |
+| [`src/better_overcooked_replay/`](src/better_overcooked_replay) | 记录协议、轨迹转换、联机房主与策略适配 |
+| [`examples/`](examples) · [`tests/`](tests) | 接入示例和 Python 回归 |
+| [`scripts/`](scripts) · [`docs/`](docs) | 构建、打包、验收和使用说明 |
 
-Unity版本：6000.6.8f1、URP17.6，Windows x64/Mono 与 macOS Universal/Mono。场景/Prefab/.meta和包锁纳入版本控制；Library、环境、训练输出、商店美术源文件及原始角色模型不上传。
-
-**源码重建与运行发行包的依赖不同。**重建完整场景需要自行取得并导入 Restaurant Bits for Unity、Cartoon Town和Synty Simple Sky，遵守各自许可；来源与目录见 [资源说明](unity/ASSET_SOURCES.md)。使用本仓库导入脚本时保留原.meta GUID。角色源模型与派生Prefab也需本地准备；没有本地角色会使用程序自制厨师。大肥鱼模型不属于MIT源码授权。
-
-准备本地资源后，用Unity Hub打开工程，或运行：
+重建需要 **Unity 6000.6.8f1、URP 17.6** 及本地美术资源。按 [资源说明](unity/ASSET_SOURCES.md) 导入 Restaurant Bits for Unity、Cartoon Town 和 Synty Simple Sky，保留资产的 `.meta` GUID。联机构建还需要本地角色预制体。准备好资源后，从本仓库根目录运行 Windows 构建。
 
 ```powershell
-.\scripts\build-windows.ps1 -Initialize
+.\scripts\build-windows.ps1
 ```
 
-首次Initialize会重建生成场景和预制体；已有工程保留编辑时省略该参数，执行回归与构建。输出 `output/Windows/OvercookedReplay.exe`。首次许可激活和资源商店登录由使用者完成。
+输出为 `output/Windows/OvercookedReplay.exe`。首次生成场景和预制体时使用 `-Initialize`。已有场景和预制体时使用上面的命令，以保留工程编辑。
 
-测试：`python -m pip install -e ".[test]"` 后执行 `python -m pytest tests -q`。SB3/PyTorch仅可选训练适配需要，观看或基础记录不需要。训练观察在Python生成，与Unity分辨率、帧率和美术资源完全独立。
+- **联机开发和便携包重建**见 [Windows 实时对局开发指南](LIVE-QUICKSTART.md)。
+- **macOS 重建**在 Windows 的同版本 Unity 中安装 macOS Build Support (Mono)，运行 [`build-macos.ps1`](scripts/build-macos.ps1)，再用 [`package-macos.py`](scripts/package-macos.py) 打包 `output/macOS/OvercookedReplay.app`。[Mac 构建与验收](docs/MACOS_VALIDATION.md)
+- **Python 回归**在 Python 3.10 环境安装 `.[test]` 后运行 `python -m pytest tests -q`。训练适配依赖列在 [`pyproject.toml`](pyproject.toml) 的 `train` 额外依赖中。
 
 ## 许可证与署名
 
-源码采用 [MIT](LICENSE)，保留上游 Center for Human-Compatible AI 版权声明。第三方美术、模型、Unity运行时和UPM依赖分别遵循原许可，**MIT不授予这些资源的独立再分发权**。企鹅原模型 ilvoris、绑定 photon/Professor_E12，CC BY4.0，具体链接及修改说明见发行包 `CharacterCredits.txt`。商店源资源和大肥鱼原始VRM不包含在公开源码中。含第三方美术的Windows发行包须保留全部署名及授权文件。
+这是面向 Overcooked-AI 的社区项目。源码采用 [MIT](LICENSE)，保留 Center for Human-Compatible AI 版权声明。角色、商店美术、字体和 Unity 运行库适用各自的许可。发行包内附 `CharacterCredits.txt`、第三方声明及许可证目录。[第三方声明](THIRD_PARTY_NOTICES.md) · [许可证文件](LICENSES)
+
+[live-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.2.0-live-windows-preview/OvercookedLive-Windows-x64-v0.2.0-live-windows-preview.zip
+[win-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.1.0/BetterReplay-Windows-x64-v0.1.0.zip
+[mac-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.1.3-macos-preview/BetterReplay-macOS-Universal-v0.1.3-macos-preview.zip
+[releases]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases
+[upstream]: https://github.com/HumanCompatibleAI/overcooked_ai

@@ -19,6 +19,8 @@ public static class MacBuild {
         else Debug.Log("No local penguin prefab; using built-in chef fallback.");
         if(Resources.Load<GameObject>("LocalCharacters/BlueFatFish"))BlueFishChecks.Actor();
         else Debug.Log("No local fish prefab; using built-in chef fallback.");
+        PlatformResourceChecks.Prepare();PlatformResourceChecks.Run();
+        ReplayUiChecks.State();SimmerChecks.Run();CafeFixtureChecks.Run();
         ReplayChecks.SerializerRegression();ReplayChecks.Run();
         var target=NamedBuildTarget.Standalone;
         var backend=PlayerSettings.GetScriptingBackend(target);
@@ -31,7 +33,7 @@ public static class MacBuild {
         try {
             PlayerSettings.SetScriptingBackend(target,ScriptingImplementation.Mono2x);
             PlayerSettings.SetApplicationIdentifier(target,"com.lynxpeng.betterovercookedreplay");
-            PlayerSettings.bundleVersion="0.1.1";
+            PlayerSettings.bundleVersion="0.1.3";
             PlayerSettings.SetArchitecture(target,2); // Unity: Universal (Intel x86_64 + Apple Silicon arm64).
             // Desktop architecture is also stored per platform in recent Unity versions.
             EditorUserBuildSettings.SetPlatformSettings("OSXUniversal","Architecture","x64arm64");

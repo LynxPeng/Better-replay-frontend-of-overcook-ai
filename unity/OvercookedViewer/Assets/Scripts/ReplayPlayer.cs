@@ -10,22 +10,27 @@ public partial class ReplayPlayer : MonoBehaviour {
     public ReplayPresentationClock Presentation {get;private set;}
     Transform world,objects; readonly Transform[] chefs=new Transform[2]; readonly string[] heldNames=new string[2];
     readonly IReplayChefActor[] characterActors=new IReplayChefActor[2];
-    readonly List<Transform> steam=new List<Transform>(); readonly List<Vector3> steamRoots=new List<Vector3>();
+    readonly Dictionary<Vector2Int,PotSimmer> stoves=new Dictionary<Vector2Int,PotSimmer>();
     string[] samples; string error=""; int applied=-1; float yaw=0;
     ViewerPreferences preferences=new ViewerPreferences();readonly ViewerSettingsPanel settings=new ViewerSettingsPanel();
     KitchenView view=KitchenView.LongEdge;int screenWidth,screenHeight;
     readonly CameraNavigation navigation=new CameraNavigation();LevelSky sky;
     bool labels=true; string capture; int captureFrame=-1; bool captureQuit,captureUi;
+    float captureAfter;
     public bool UseBlueFish=true;
     public bool UseGuguGaga=true;
     AudioSource sound; AudioClip delivery;
     InteractionHints interactionHints;
+    LiveClient live;
+    internal bool ModalOpen => settings.Open;
+    internal bool IsLive => live && !live.Reviewing;
     public static Vector3 World(int[] p) => new Vector3(p[0],0,-p[1]);
     public static string CharacterResource(int agent,bool enabled) {
         if(agent<0||agent>1)throw new ArgumentOutOfRangeException(nameof(agent));
         return enabled?(agent==0?"LocalCharacters/BlueFatFish":"LocalCharacters/GuguGaga"):null;
     }
     void Start() {
+        live=GetComponent<LiveClient>();
         preferences=ViewerPreferences.Load(ViewerPreferences.DefaultPath);view=(KitchenView)preferences.viewMode;
         ApplyPreferences(preferences,false);
         var skyPrefab=Resources.Load<GameObject>("Prefabs/ReplaySky");
@@ -44,25 +49,30 @@ public partial class ReplayPlayer : MonoBehaviour {
         }
         captureQuit=Array.IndexOf(args,"--quit-after-capture")>=0;
         captureUi=Array.IndexOf(args,"--capture-ui")>=0;
+        captureAfter=Time.realtimeSinceStartup+1.5f;
         if(captureUi&&capture!=null)for(int i=0;i<args.Length-1;i++)if(args[i]=="--capture-size") {
             var size=args[i+1].Split('x');if(size.Length==2&&int.TryParse(size[0],out int cw)&&int.TryParse(size[1],out int ch)&&cw>=1024&&ch>=720)Screen.SetResolution(cw,ch,FullScreenMode.Windowed);
         }
         if(Array.IndexOf(args,"--night")>=0)preferences.night=true;
         if(Array.IndexOf(args,"--day")>=0)preferences.night=false;
         SetNight(preferences.night,false);
-        if(file!=null)Load(file);
+        if(file!=null&&!IsLive)Load(file);
         if(captureFrame>=0 && Clock!=null)Seek(captureFrame);
         if(Array.IndexOf(args,"--show-settings")>=0)settings.Show(preferences);
     }
     public void Load(string path) {
         try {
-            var next=ReplayFile.Load(path); Data=next;Clock=new ReplayClock(next);Clock.Playing=false;applied=-1;error="";loadedName=Path.GetFileName(path);
+            BeginPresentation(ReplayFile.Load(path),Path.GetFileName(path));
+        }catch(Exception ex){error=ex.Message;Debug.LogWarning(error);}
+    }
+    internal void BeginPresentation(ReplayFile next,string name) {
+            Data=next;Clock=new ReplayClock(next);Clock.Playing=false;applied=-1;error="";loadedName=name;
             Presentation=new ReplayPresentationClock(Clock,0);
             if(world)Destroy(world.gameObject);
             world=new GameObject("Kitchen").transform;
             interactionHints=world.gameObject.AddComponent<InteractionHints>();
             objects=new GameObject("Objects").transform;objects.SetParent(world,false);
-            steam.Clear();steamRoots.Clear();
+            stoves.Clear();
             int w=Data.header.terrain[0].Length,h=Data.header.terrain.Length;
             KitchenFactory.Part("IslandBase",world,PrimitiveType.Cube,new Vector3((w-1)*.5f,-.24f,-(h-1)*.5f),new Vector3(w+.65f,.4f,h+.65f),KitchenFactory.Material("#8f6946"));
             RestaurantBackdrop.Build(world,w,h);
@@ -79,6 +89,7 @@ public partial class ReplayPlayer : MonoBehaviour {
                     }
                     var rounded=g.GetComponentInChildren<RoundedWorktop>();if(rounded)rounded.Apply();
                     interactionHints.Register(new Vector2Int(x,y),g);
+                    if(tile=='P')stoves.Add(new Vector2Int(x,y),new PotSimmer(g.transform,x,y));
                 }
             }
             for(int i=0;i<2;i++) {
@@ -96,7 +107,24 @@ public partial class ReplayPlayer : MonoBehaviour {
             }
             Presentation=new ReplayPresentationClock(Clock,tail);
             ResetCamera();Apply();SetNight(preferences.night,false);
-        }catch(Exception ex){error=ex.Message;Debug.LogWarning(error);}
+    }
+    internal void LiveStep(Frame frame,Segment segment) {
+        // A bounded rolling window retains earlier delivery events for the full animation.
+        var old=Data;int keep=Mathf.Min(old.frames.Length,12);
+        var frames=new Frame[keep+1];var segments=new Segment[keep];
+        Array.Copy(old.frames,old.frames.Length-keep,frames,0,keep);
+        if(keep>1)Array.Copy(old.segments,old.segments.Length-keep+1,segments,0,keep-1);
+        frames[keep]=frame;segments[keep-1]=segment;
+        old.frames=frames;old.segments=segments;
+        Clock.SeekFrame(keep-1);
+        Presentation=new ReplayPresentationClock(Clock,BlueFishMotion.CelebrationDuration);
+        Clock.Playing=true;applied=-1;Apply();
+        if(sound && segment.events!=null)foreach(var e in segment.events)
+            if(e.kind=="soup_delivery")sound.PlayOneShot(delivery);
+    }
+    internal void SettleLiveFrame() {
+        if(Clock==null)return;
+        Clock.SeekFrame(Data.frames.Length-1);applied=-1;Apply();
     }
     void FrameCamera() {
         if(Data==null)return; var camera=Camera.main;
@@ -118,7 +146,7 @@ public partial class ReplayPlayer : MonoBehaviour {
             ShiftHeld=Input.GetKey(KeyCode.LeftShift)||Input.GetKey(KeyCode.RightShift),
             GroundPressed=Input.GetMouseButtonDown(2),GroundHeld=Input.GetMouseButton(2),
             PitchPressed=Input.GetMouseButtonDown(1),PitchHeld=Input.GetMouseButton(1),
-            Axes=new Vector2((Input.GetKey(KeyCode.D)?1:0)-(Input.GetKey(KeyCode.A)?1:0),(Input.GetKey(KeyCode.W)?1:0)-(Input.GetKey(KeyCode.S)?1:0))
+            Axes=IsLive && !live.Spectating?Vector2.zero:new Vector2((Input.GetKey(KeyCode.D)?1:0)-(Input.GetKey(KeyCode.A)?1:0),(Input.GetKey(KeyCode.W)?1:0)-(Input.GetKey(KeyCode.S)?1:0))
         };
         if(navigation.Step(Camera.main,input,UnityEngine.Time.unscaledDeltaTime))FrameCamera();
     }
@@ -134,18 +162,24 @@ public partial class ReplayPlayer : MonoBehaviour {
     }
     public void Seek(int index) {if(Clock==null)return;if(sound)sound.Stop();bool resume=Presentation.Playing;Clock.SeekFrame(index);Presentation.ResetAfterSeek(resume);applied=-1;Apply();}
     void Update() {
-        if(Clock==null)return;int old=Clock.Index;Presentation.Advance(UnityEngine.Time.unscaledDeltaTime);Apply();
+        if(Clock==null){if(captureUi)CaptureRequestedFrame();return;}
+        int old=Clock.Index;Presentation.Advance(UnityEngine.Time.unscaledDeltaTime);Apply();
         if(screenWidth!=Screen.width||screenHeight!=Screen.height)FrameCamera();
-        if(Clock.Index>old && sound)for(int k=old;k<Clock.Index;k++) {
+        if(!IsLive && Clock.Index>old && sound)for(int k=old;k<Clock.Index;k++) {
             var events=Data.segments[k].events;if(events!=null)foreach(var e in events)if(e.kind=="soup_delivery")sound.PlayOneShot(delivery);
         }
-        if(!settings.Open) {
+        if(!IsLive && !settings.Open) {
             if(Input.GetKeyDown(KeyCode.Space))Presentation.Toggle();
             if(Input.GetKeyDown(KeyCode.RightArrow))Seek(Clock.Index+1);
             if(Input.GetKeyDown(KeyCode.LeftArrow))Seek(Clock.Index-1);
         }
         NavigateCamera();
-        if(capture!=null && UnityEngine.Time.frameCount>40) {
+        CaptureRequestedFrame();
+    }
+    void CaptureRequestedFrame() {
+        if(capture!=null && IsLive && captureFrame>=0 && (!live.ShowKitchen || live.ConfirmedTick<captureFrame))return;
+        if(capture!=null && UnityEngine.Time.frameCount>40 && Time.realtimeSinceStartup>=captureAfter
+            && (!captureUi || SplashScreen.isFinished)) {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(capture)));
             if(captureUi){var destination=capture;capture=null;StartCoroutine(CaptureInterface(destination));return;}
             // Explicit render request works in a windowless player as well.
@@ -166,16 +200,18 @@ public partial class ReplayPlayer : MonoBehaviour {
     void Apply() {
         if(Data==null)return;int index=Clock.Index;var state=Data.frames[index].state;
         if(applied!=index) {
-            foreach(Transform child in objects)Destroy(child.gameObject);steam.Clear();steamRoots.Clear();
+            foreach(Transform child in objects)Destroy(child.gameObject);
+            foreach(var stove in stoves) {
+                Item soup=null;
+                foreach(var candidate in state.objects)
+                    if(candidate.name=="soup" && candidate.position[0]==stove.Key.x && candidate.position[1]==stove.Key.y){soup=candidate;break;}
+                stove.Value.SetSoup(soup);
+            }
             foreach(var o in state.objects) {
                 Vector3 p=World(o.position)+Vector3.up*KitchenFactory.CounterTopHeight;
                 if(o.name=="soup" && Data.header.terrain[o.position[1]][o.position[0]]=='P') {
                     if(o._ingredients!=null)for(int j=0;j<o._ingredients.Length;j++)
                         KitchenFactory.Item(o._ingredients[j].name,objects,p+new Vector3((j-1)*.17f,.13f,0),.17f);
-                    if(o.is_cooking||o.is_ready)for(int j=0;j<3;j++) {
-                        var g=KitchenFactory.Part("Steam",objects,PrimitiveType.Sphere,p,Vector3.one*.11f,KitchenFactory.Material("#ffffff"));
-                        steam.Add(g.transform);steamRoots.Add(p+Vector3.up*.32f);
-                    }
                     float ratio=o.is_idle?0:Mathf.Clamp01(o.cooking_tick/Mathf.Max(1,o.cook_time));
                     KitchenFactory.Part("CookingProgress",objects,PrimitiveType.Cube,p+new Vector3((ratio-1)*.28f,.35f,.38f),new Vector3(Mathf.Max(.01f,ratio*.56f),.045f,.055f),KitchenFactory.Material(o.is_ready?"#78c994":"#eebd64"));
                 } else KitchenFactory.Item(o.name,objects,p);
@@ -215,10 +251,9 @@ public partial class ReplayPlayer : MonoBehaviour {
                 if(held!="")KitchenFactory.Item(held,anchor,Vector3.zero,character!=null ? .30f : .4f);heldNames[i]=held;
             }
         }
-        for(int i=0;i<steam.Count;i++) {
-            float phase=Mathf.Repeat(Clock.Time*.8f+i*.32f,1);
-            steam[i].localPosition=steamRoots[i]+new Vector3(Mathf.Sin(Clock.Time*2+i)*.08f,phase*.6f,0);
-            steam[i].localScale=Vector3.one*(.06f+.10f*phase);
+        if(stoves.Count>0) {
+            var view=Camera.main.transform.rotation;
+            foreach(var stove in stoves.Values)stove.Sample(Clock.Time,view);
         }
         if(interactionHints)interactionHints.Refresh(Data.header,state);
     }

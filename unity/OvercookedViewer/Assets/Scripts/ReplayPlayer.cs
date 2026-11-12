@@ -8,8 +8,10 @@ namespace OvercookedReplay {
 public partial class ReplayPlayer : MonoBehaviour {
     public ReplayFile Data {get;private set;} public ReplayClock Clock {get;private set;}
     public ReplayPresentationClock Presentation {get;private set;}
-    Transform world,objects; readonly Transform[] chefs=new Transform[2]; readonly string[] heldNames=new string[2];
-    readonly IReplayChefActor[] characterActors=new IReplayChefActor[2];
+    Transform world,objects; Transform[] chefs; string[] heldNames;
+    IReplayChefActor[] characterActors;
+    static readonly Color[] ChefColors={new Color(.22f,.52f,.7f),new Color(.86f,.43f,.25f),new Color(.22f,.65f,.44f)};
+    readonly Dictionary<Vector2Int,Renderer> handoffStations=new Dictionary<Vector2Int,Renderer>();
     readonly Dictionary<Vector2Int,PotSimmer> stoves=new Dictionary<Vector2Int,PotSimmer>();
     string[] samples; string error=""; int applied=-1; float yaw=0;
     ViewerPreferences preferences=new ViewerPreferences();readonly ViewerSettingsPanel settings=new ViewerSettingsPanel();
@@ -24,10 +26,12 @@ public partial class ReplayPlayer : MonoBehaviour {
     LiveClient live;
     internal bool ModalOpen => settings.Open;
     internal bool IsLive => live && !live.Reviewing;
+    SyncHandoff[] LastHandoffs => Clock.Index>0 ? Data.segments[Clock.Index-1].sync_handoffs : null;
     public static Vector3 World(int[] p) => new Vector3(p[0],0,-p[1]);
     public static string CharacterResource(int agent,bool enabled) {
-        if(agent<0||agent>1)throw new ArgumentOutOfRangeException(nameof(agent));
-        return enabled?(agent==0?"LocalCharacters/BlueFatFish":"LocalCharacters/GuguGaga"):null;
+        if(agent<0||agent>=ChefColors.Length)throw new ArgumentOutOfRangeException(nameof(agent));
+        if(!enabled)return null;
+        return agent switch {0=>"LocalCharacters/BlueFatFish",1=>"LocalCharacters/GuguGaga",_=>null};
     }
     void Start() {
         live=GetComponent<LiveClient>();
@@ -73,7 +77,11 @@ public partial class ReplayPlayer : MonoBehaviour {
             interactionHints=world.gameObject.AddComponent<InteractionHints>();
             objects=new GameObject("Objects").transform;objects.SetParent(world,false);
             stoves.Clear();
+            handoffStations.Clear();
             int w=Data.header.terrain[0].Length,h=Data.header.terrain.Length;
+            int playerCount=Data.header.players.Length;
+            chefs=new Transform[playerCount];heldNames=new string[playerCount];characterActors=new IReplayChefActor[playerCount];
+            interactionHints.PlayerCount=playerCount;
             KitchenFactory.Part("IslandBase",world,PrimitiveType.Cube,new Vector3((w-1)*.5f,-.24f,-(h-1)*.5f),new Vector3(w+.65f,.4f,h+.65f),KitchenFactory.Material("#8f6946"));
             RestaurantBackdrop.Build(world,w,h);
             for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
@@ -88,20 +96,24 @@ public partial class ReplayPlayer : MonoBehaviour {
                         }
                     }
                     var rounded=g.GetComponentInChildren<RoundedWorktop>();if(rounded)rounded.Apply();
-                    interactionHints.Register(new Vector2Int(x,y),g);
-                    if(tile=='P')stoves.Add(new Vector2Int(x,y),new PotSimmer(g.transform,x,y));
+                    var cell=new Vector2Int(x,y);
+                    if(tile=='H') {
+                        bool northSouth=y>0 && y+1<h && Data.header.terrain[y-1][x]==' ' && Data.header.terrain[y+1][x]==' ';
+                        handoffStations[cell]=KitchenFactory.HandoffMarker(g.transform,northSouth);
+                    } else interactionHints.Register(cell,g);
+                    if(tile=='P')stoves.Add(cell,new PotSimmer(g.transform,x,y));
                 }
             }
-            for(int i=0;i<2;i++) {
+            for(int i=0;i<playerCount;i++) {
                 string resource=CharacterResource(i,i==0?UseBlueFish:UseGuguGaga);
                 var prefab=resource!=null?Resources.Load<GameObject>(resource):null;
                 if(!prefab)prefab=Resources.Load<GameObject>("Prefabs/Chef"+i);
-                var g=prefab?Instantiate(prefab):KitchenFactory.Chef(i==0?new Color(.22f,.52f,.7f):new Color(.86f,.43f,.25f));
+                var g=prefab?Instantiate(prefab):KitchenFactory.Chef(ChefColors[i]);
                 chefs[i]=g.transform;chefs[i].SetParent(world,false);heldNames[i]=null;
                 characterActors[i]=g.GetComponent<IReplayChefActor>();
             }
             float tail=0;
-            for(int i=0;i<2;i++)if(characterActors[i]!=null) {
+            for(int i=0;i<playerCount;i++)if(characterActors[i]!=null) {
                 float finalPhase=BlueFishReplayPose.CelebrationPhase(Data,Data.frames.Length-1,i,Clock.Duration);
                 if(finalPhase>=0)tail=Mathf.Max(tail,(1-finalPhase)*BlueFishMotion.CelebrationDuration);
             }
@@ -207,6 +219,12 @@ public partial class ReplayPlayer : MonoBehaviour {
                     if(candidate.name=="soup" && candidate.position[0]==stove.Key.x && candidate.position[1]==stove.Key.y){soup=candidate;break;}
                 stove.Value.SetSoup(soup);
             }
+            foreach(var marker in handoffStations.Values)marker.sharedMaterial=KitchenFactory.Material("#306F73");
+            var handoffs=LastHandoffs;
+            if(handoffs!=null)foreach(var handoff in handoffs) {
+                var cell=new Vector2Int(handoff.station[0],handoff.station[1]);
+                handoffStations[cell].sharedMaterial=KitchenFactory.Material(handoff.success?"#19824B":"#B15B19");
+            }
             foreach(var o in state.objects) {
                 Vector3 p=World(o.position)+Vector3.up*KitchenFactory.CounterTopHeight;
                 if(o.name=="soup" && Data.header.terrain[o.position[1]][o.position[0]]=='P') {
@@ -218,7 +236,7 @@ public partial class ReplayPlayer : MonoBehaviour {
             }
             applied=index;
         }
-        for(int i=0;i<2;i++) {
+        for(int i=0;i<chefs.Length;i++) {
             var p=state.players[i];Vector3 pos=World(p.position);float angle=Mathf.Atan2(p.orientation[0],-p.orientation[1])*Mathf.Rad2Deg;
             bool moving=false;float turnProgress=Clock.Alpha;
             if(index<Data.segments.Length && Data.segments[index].kind=="step") {

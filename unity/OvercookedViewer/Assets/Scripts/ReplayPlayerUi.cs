@@ -11,6 +11,18 @@ public partial class ReplayPlayer {
     readonly List<float> deliveryTimes=new List<float>();
     static readonly float[] PlaybackSpeeds={.25f,.5f,1,2,4};
     void OnDestroy(){dayUi?.Dispose();nightUi?.Dispose();}
+    static readonly string[] ChefNames={"蓝方","橙方","绿方"};
+    static readonly string[] ChefDescriptions={"蓝方   大肥鱼","橙方   企鹅","绿方   厨师"};
+    static string HandoffStatus(SyncHandoff handoff) {
+        if(handoff.success)return $"{ChefNames[handoff.sender]} → {ChefNames[handoff.receiver]}";
+        return handoff.reason switch {
+            "waiting_for_partner"=>"等待搭档",
+            "not_simultaneous"=>"未同时交互",
+            "both_empty"=>"双方都空手",
+            "both_holding"=>"双方都持有物品",
+            _=>"交接未完成"
+        };
+    }
     void OpenReplay() {
         if(Presentation!=null)Presentation.Pause();CancelCameraDrag();
         try {var path=NativeDialog.Open();if(path!=null)Load(path);}
@@ -50,7 +62,10 @@ public partial class ReplayPlayer {
         GUI.Label(new Rect(33,217,232,24),new GUIContent(fileLabel,loadedName),ui.Caption);
         ui.Perforation(32,250,234);
         var orders=Clock!=null?Data.frames[Clock.Index].state.all_orders:null;
+        var handoffs=Clock!=null?LastHandoffs:null;
         float contentHeight=235+(kitchenListOpen?(samples?.Length??0)*30:0)+Mathf.Max(1,orders?.Length??0)*54+(error!=""?110:0)+(Data!=null&&!Data.header.complete?35:0);
+        if(Data?.header.players.Length==3)contentHeight+=33;
+        contentHeight+=(handoffs?.Length??0)*29;
         sidebarScroll=GUI.BeginScrollView(new Rect(30,264,242,Mathf.Max(60,height-335)),sidebarScroll,new Rect(0,0,225,contentHeight),false,false,GUIStyle.none,ui.ScrollTrack);
         float y=0;
         ui.Label(new Rect(2,y,220,22),"厨房选择",ui.Heading);y+=28;
@@ -71,10 +86,14 @@ public partial class ReplayPlayer {
             }
             y+=4;ui.Perforation(2,y,220);y+=14;
             ui.Label(new Rect(2,y,220,22),"出场厨师",ui.Heading);y+=24;
-            for(int i=0;i<2;i++) {
-                ui.Fill(new Rect(2,y+9,5,12),i==0?ui.BlueSeat:ui.OrangeSeat);
-                ui.Label(new Rect(16,y,146,30),i==0?"蓝方   大肥鱼":"橙方   企鹅");
+            for(int i=0;i<Data.header.players.Length;i++) {
+                var seatColor=i switch {0=>ui.BlueSeat,1=>ui.OrangeSeat,_=>ChefColors[i]};
+                ui.Fill(new Rect(2,y+9,5,12),seatColor);
+                ui.Label(new Rect(16,y,146,30),ChefDescriptions[i]);
                 ui.Label(new Rect(178,y,46,30),Data.header.players[i].is_human?"人类":"AI",ui.Caption);y+=33;
+            }
+            if(handoffs!=null)foreach(var handoff in handoffs) {
+                ui.Label(new Rect(2,y,222,26),"同步对接 · "+HandoffStatus(handoff),ui.Caption);y+=29;
             }
             if(!Data.header.complete){ui.Label(new Rect(2,y+8,220,22),"记录不完整，播放至最后已知状态",ui.Caption);y+=35;}
         }else {ui.Label(new Rect(2,y,220,28),"打开回放，或选择一个示例厨房。",ui.Caption);}
@@ -129,13 +148,13 @@ public partial class ReplayPlayer {
     }
     static string ClockText(float seconds){int s=Mathf.Max(0,Mathf.FloorToInt(seconds));return (s/60)+":"+(s%60).ToString("00");}
     void Names(float scale) {
-        for(int i=0;i<2;i++) {
+        for(int i=0;i<chefs.Length;i++) {
             var point=Camera.main.WorldToScreenPoint(chefs[i].position+Vector3.up*ReplayUiLayout.NameHeight);
             if(point.z<=0)continue;
             var name=new Rect(point.x/scale-40,(Screen.height-point.y)/scale-12,80,18);
             if(name.xMin<302||name.xMax>1264||name.yMin<78||name.yMax>Screen.height/scale*.83f)continue;
-            ui.Label(new Rect(name.x+1,name.y+1,name.width,name.height),i==0?"蓝方":"橙方",ui.NameShadow);
-            ui.Label(name,i==0?"蓝方":"橙方",ui.Name);
+            ui.Label(new Rect(name.x+1,name.y+1,name.width,name.height),ChefNames[i],ui.NameShadow);
+            ui.Label(name,ChefNames[i],ui.Name);
         }
     }
     IEnumerator CaptureInterface(string path) {

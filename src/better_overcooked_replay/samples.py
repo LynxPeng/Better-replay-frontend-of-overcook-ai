@@ -21,6 +21,25 @@ def delivery_plan():
     return [(a,Action.STAY) for a in plan]
 
 
+def handoff_sample(destination):
+    layout = 'three_player_sync_handoff'
+    mdp = OvercookedGridworld.from_layout_name(layout)
+    interact, stay = Action.INTERACT, Action.STAY
+    plan = [(stay, stay, stay), (interact, stay, stay), (interact, interact, interact)]
+    env = OvercookedEnv.from_mdp(mdp, horizon=len(plan))
+    sender, third, receiver = env.state.players
+    sender.update_pos_and_or((4, 3), D.EAST)
+    sender.set_object(ObjectState('onion', sender.position))
+    third.update_pos_and_or((9, 4), D.EAST)
+    receiver.update_pos_and_or((6, 3), D.WEST)
+    recorder = ReplayRecorder(mdp, env.state, dict(horizon=len(plan), tick_rate=1,
+                                                    source='scripted-demo', custom_initial_state=True))
+    for joint in plan:
+        state, reward, _, info = env.step(joint)
+        recorder.append(joint, state, reward, info)
+    return recorder.write(destination / f'{layout}.ocrep.json')
+
+
 def generate_samples(output_dir):
     destination = Path(output_dir)
     outputs = []
@@ -44,4 +63,6 @@ def generate_samples(output_dir):
         outputs.append(rec.write(destination / f'{layout}.ocrep.json'))
         if index == 0 and rec.frames[-1]['score'] != 20:
             raise RuntimeError('Scripted demo failed to deliver exactly one soup')
+    if hasattr(OvercookedGridworld, 'get_sync_handoff_locations'):
+        outputs.append(handoff_sample(destination))
     return outputs

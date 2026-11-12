@@ -171,6 +171,9 @@ public static class KitchenFactory {
         if(!counter)counter=RestaurantProp("kitchencounter_straight_A",t,.98f,Vector3.zero,CounterTopHeight);
         if(counter)FitCounterWorktop(counter);
         if(counter&&round)counter.GetComponent<RoundedWorktop>().Apply();
+        if(tile=='H'&&!counter)
+            Part("Handoff counter",t,PrimitiveType.Cube,Vector3.up*(CounterTopHeight/2),
+                new Vector3(.88f,CounterTopHeight,.88f),Material("#574E46"));
         if(tile=='P') {
             RestaurantProp("pot_A",t,.7f,Vector3.up*(CounterTopHeight+.015f));
         }
@@ -184,5 +187,21 @@ public static class KitchenFactory {
             RestaurantProp("menu",t,.28f,new Vector3(.30f,CounterTopHeight,.28f),-1,180);
         }
         return root;
+    }
+    public static Renderer HandoffMarker(Transform station,bool northSouth) {
+        var marker=new GameObject("Synchronous handoff marker").transform;
+        marker.SetParent(station,false);
+        marker.localPosition=Vector3.up*(CounterTopHeight+.025f);
+        marker.localRotation=Quaternion.Euler(0,northSouth?90:0,0);
+        var plate=Part("Handoff plate",marker,PrimitiveType.Cube,Vector3.zero,
+            new Vector3(.68f,.035f,.38f),Material("#306F73"));
+        var white=Material("#FFF2DF");
+        Part("Arrow shaft",marker,PrimitiveType.Cube,Vector3.up*.024f,new Vector3(.38f,.015f,.033f),white);
+        foreach(int side in new[]{-1,1})foreach(int edge in new[]{-1,1}) {
+            var stroke=Part("Arrow head",marker,PrimitiveType.Cube,new Vector3(side*.151f,.024f,edge*.044f),
+                new Vector3(.125f,.015f,.033f),white);
+            stroke.transform.localRotation=Quaternion.Euler(0,side*edge*45,0);
+        }
+        return plate.GetComponent<Renderer>();
     }
 }}

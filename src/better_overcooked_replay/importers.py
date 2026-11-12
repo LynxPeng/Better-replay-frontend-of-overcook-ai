@@ -7,7 +7,7 @@ import json
 import pickle
 from pathlib import Path
 
-from .protocol import action_index, make_header, normalize_state, transition_events, validate_replay, write_replay
+from .protocol import action_index, make_header, normalize_state, step_segment, validate_replay, write_replay
 from .recipes import scoped_recipes
 
 
@@ -47,7 +47,7 @@ def _restore_last(params, states, actions, rewards, dynamics):
             return normalize_state(successor)
 
 
-def _episode(states, actions, rewards, params, metadata, times=None, scores=None, dynamics=None):
+def _episode(states, actions, rewards, params, metadata, times=None, scores=None, dynamics=None, infos=None):
     states = [normalize_state(s) for s in states]
     actions, rewards = list(actions), list(rewards)
     diagnostics = []
@@ -79,7 +79,8 @@ def _episode(states, actions, rewards, params, metadata, times=None, scores=None
         from overcooked_ai_py.utils import read_layout_dict
         grid = read_layout_dict(params['layout_name'])['grid']
         terrain = [''.join(' ' if c.isdigit() else c for c in row.strip()) for row in grid.split('\n')]
-    header = make_header(terrain, params.get('layout_name', 'imported'), metadata)
+    header = make_header(terrain, params.get('layout_name', 'imported'), metadata,
+                         player_count=len(states[0]['players']))
     header.update(complete=complete, dynamics=dynamics or 'unknown', mdp_params_json=json.dumps(params, default=list))
     if times is not None:
         header['timebase'] = 'source'
@@ -102,8 +103,8 @@ def _episode(states, actions, rewards, params, metadata, times=None, scores=None
             diagnostics.append(f'Gap after source timestep {state["timestep"]}; action/reward unknown')
         else:
             indices = [action_index(a) for a in decoded(actions[i])]
-            segments.append(dict(kind='step', actions=indices, sparse_reward=float(rewards[i]), reward_known=True,
-                                 shaped_reward_by_agent=[0,0], events=transition_events(state, states[i+1], indices, {})))
+            info = infos[i] if infos is not None and i < len(infos) else None
+            segments.append(step_segment(state, states[i+1], indices, rewards[i], info or {}))
     return validate_replay(dict(header=header, frames=frames, segments=segments, diagnostics=diagnostics))
 
 
@@ -114,11 +115,14 @@ def convert_data(data, dynamics=None, source_name='imported'):
         return [validate_replay(copy.deepcopy(data))]
     if isinstance(data, dict) and 'ep_states' in data:
         results = []
+        episode_infos = data.get('ep_infos')
         for i, states in enumerate(data['ep_states']):
             params = data['mdp_params'][i]
             env_params = data.get('env_params', [{}] * len(data['ep_states']))[i]
             meta = dict(source=source_name, horizon=int(env_params.get('horizon', len(data['ep_actions'][i]))))
-            results.append(_episode(states, data['ep_actions'][i], data['ep_rewards'][i], params, meta, dynamics=dynamics))
+            infos = episode_infos[i] if episode_infos is not None else None
+            results.append(_episode(states, data['ep_actions'][i], data['ep_rewards'][i], params, meta,
+                                    dynamics=dynamics, infos=infos))
         return results
     if hasattr(data, 'to_dict') and not isinstance(data, dict):
         data = data.to_dict(orient='records')
@@ -131,7 +135,7 @@ def convert_data(data, dynamics=None, source_name='imported'):
         if not isinstance(row, dict) or 'state' not in row or 'joint_action' not in row:
             raise ValueError(f'row {row_index}: state and joint_action required')
         key = (str(row.get('trial_id', 'episode')), str(row.get('layout_name', 'custom')),
-               str(row.get('player_0_id', '0')), str(row.get('player_1_id', '1')))
+               *(str(row.get(f'player_{i}_id', i)) for i in range(3)))
         groups.setdefault(key, []).append(row)
     results = []
     for key, rows in groups.items():
@@ -147,7 +151,8 @@ def convert_data(data, dynamics=None, source_name='imported'):
             params['start_player_positions'] = [p['position'] for p in states[0]['players']]
             params['start_all_orders'] = states[0].get('all_orders', [])
         players = [dict(id=str(first.get(f'player_{i}_id', i)),
-                        is_human=str(first.get(f'player_{i}_is_human', False)).lower() == 'true') for i in range(2)]
+                        is_human=str(first.get(f'player_{i}_is_human', False)).lower() == 'true')
+                   for i in range(len(states[0]['players']))]
         times = [float(r['time_elapsed']) for r in rows] if all('time_elapsed' in r for r in rows) else None
         rewards = [float(r.get('reward', 0)) for r in rows]
         scores = [float(r['score'])-rewards[i] for i, r in enumerate(rows)] if all('score' in r for r in rows) else None

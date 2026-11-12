@@ -169,7 +169,17 @@ public sealed class ReplayUiTheme : System.IDisposable {
         if(numbers)UnityEngine.Object.Destroy(numbers);
     }
     public static string KitchenName(string name) {
-        switch(name){case "cramped_room":return "拥挤厨房";case "asymmetric_advantages":return "非对称厨房";case "coordination_ring":return "协作环岛";case "forced_coordination":return "分区协作";case "counter_circuit_o_1order":return "环形工作台";case "cramped_room_tomato":return "番茄厨房";default:return name;}
+        switch(name){
+            case "cramped_room":return "拥挤厨房";
+            case "asymmetric_advantages":return "非对称厨房";
+            case "coordination_ring":return "协作环岛";
+            case "forced_coordination":return "分区协作";
+            case "counter_circuit_o_1order":return "环形工作台";
+            case "cramped_room_tomato":return "番茄厨房";
+            case "three_player_handoff":return "三人协作厨房";
+            case "three_player_sync_handoff":return "三人同步对接";
+            default:return name;
+        }
     }
 }
 }

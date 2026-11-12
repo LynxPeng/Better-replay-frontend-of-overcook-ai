@@ -6,8 +6,8 @@ import pytest
 
 from overcooked_ai_py.mdp.actions import Action, Direction
 from overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, SoupState
-from better_overcooked_replay.protocol import ReplayRecorder, validate_replay, normalize_state
+from overcooked_ai_py.mdp.overcooked_mdp import ObjectState, OvercookedGridworld, SoupState
+from better_overcooked_replay.protocol import ReplayRecorder, load_replay, validate_replay, normalize_state
 from better_overcooked_replay.importers import convert_data
 
 
@@ -45,6 +45,66 @@ def episode(steps=2):
 def native_data(states, actions, rewards, mdp):
     return dict(ep_states=[states], ep_actions=[actions], ep_rewards=[rewards],
                 mdp_params=[mdp.mdp_params], env_params=[{'horizon': len(actions)}])
+
+
+@pytest.fixture
+def handoff_episode():
+    if not hasattr(OvercookedGridworld, 'get_sync_handoff_locations'):
+        pytest.skip('requires the HuCooked environment')
+    mdp = OvercookedGridworld.from_layout_name('three_player_sync_handoff')
+    env = OvercookedEnv.from_mdp(mdp, horizon=2)
+    sender, third, receiver = env.state.players
+    sender.update_pos_and_or((4, 3), Direction.EAST)
+    sender.set_object(ObjectState('onion', (4, 3)))
+    third.update_pos_and_or((9, 4), Direction.EAST)
+    receiver.update_pos_and_or((6, 3), Direction.WEST)
+    states = [env.state.deepcopy()]
+    actions = [(Action.INTERACT, Action.STAY, Action.STAY), (Action.INTERACT,) * 3]
+    rewards, infos = [], []
+    for action in actions:
+        state, reward, _, info = env.step(action)
+        states.append(state.deepcopy())
+        rewards.append(reward)
+        infos.append(info)
+    return mdp, states, actions, rewards, infos
+
+
+def test_hucooked_replay_retains_failed_and_successful_handoffs(handoff_episode, tmp_path):
+    mdp, states, actions, rewards, infos = handoff_episode
+    recorder = ReplayRecorder(mdp, states[0])
+    for action, state, reward, info in zip(actions, states[1:], rewards, infos):
+        recorder.append(action, state, reward, info)
+    replay = load_replay(recorder.write(tmp_path / 'handoff.ocrep.json'))
+    assert len(replay['header']['players']) == 3
+    assert replay['header']['terrain'][3][5] == 'H'
+    assert len(replay['frames']) == 3
+    missed, passed = replay['segments']
+    assert missed['sync_handoffs'][0]['reason'] == 'not_simultaneous'
+    assert missed['sync_handoffs'][0]['attempting_agents'] == [0]
+    assert passed['sync_handoffs'] == [dict(station=[5, 3], participants=[0, 2],
+                                           attempting_agents=[0, 2], success=True,
+                                           reason='success', sender=0, receiver=2)]
+    assert passed['actions'] == [5, 5, 5]
+    assert len(passed['shaped_reward_by_agent']) == 3
+    assert replay['frames'][-1]['score'] == 0
+    players = replay['frames'][-1]['state']['players']
+    assert players[0]['held_object'] is None
+    assert [p['held_object']['name'] for p in players[1:]] == ['dish', 'onion']
+
+
+def test_hucooked_rollout_import_retains_terminal_and_handoff_info(handoff_episode):
+    mdp, states, actions, rewards, infos = handoff_episode
+    data = native_data(states[:-1], actions, rewards, mdp)
+    data['ep_infos'] = [infos]
+    replay = convert_data(data, dynamics='new')[0]
+    assert replay['header']['complete']
+    assert replay['frames'][-1]['state']['timestep'] == 2
+    assert replay['segments'][1]['sync_handoffs'][0]['receiver'] == 2
+    assert any(e['kind'] == 'sync_handoff_receive' and e['agent_index'] == 2
+               for e in replay['segments'][1]['events'])
+    replay['frames'][0]['state']['players'][2]['position'] = [4, 3]
+    with pytest.raises(ValueError, match='overlap'):
+        validate_replay(replay)
 
 
 def test_recorder_retains_terminal_and_detaches_mutable_snapshots(tmp_path):

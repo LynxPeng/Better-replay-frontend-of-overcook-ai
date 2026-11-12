@@ -33,7 +33,8 @@ public static class BlueFishReplayPose {
                     for(int other=0;other<data.frames[index].state.players.Length;other++)
                         if(other!=agent&&step.actions[other]==5&&Faces(data.frames[index].state.players[other],e.position))matches=false;
                 }
-                if(!matches)continue;success=true;
+                if(!matches||e.kind.StartsWith("sync_handoff_",System.StringComparison.Ordinal))continue;
+                success=true;
                 cooking|=e.kind=="start_cooking";delivery|=e.kind=="soup_delivery";
             }
             string previous=before.held_object?.name,next=after.held_object?.name;

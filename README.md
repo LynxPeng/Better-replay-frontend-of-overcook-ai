@@ -86,7 +86,22 @@ python -m venv .venv
 
 ### 接入你自己的智能体
 
-在初态创建 `ReplayRecorder`，让两名智能体基于**同一个状态**选择动作。每次联合动作只调用一次 `env.step()`，随后把动作、新状态、奖励和 `info` 写入记录器。保存最后一帧后再重置环境。完整对局包含 **T 步和 T+1 帧**，提前结束时用 `complete=False`。展示时间由 `tick_rate` 决定，团队得分使用稀疏奖励，塑形奖励单独保存。
+在初态创建 `ReplayRecorder`，让所有智能体基于**同一个状态**选择动作，动作顺序与 `env.state.players` 一致。每次联合动作只调用一次 `env.step()`，随后把动作、新状态、奖励和 `info` 写入记录器。保存最后一帧后再重置环境。完整对局包含 **T 步和 T+1 帧**，提前结束时用 `complete=False`。展示时间由 `tick_rate` 决定，团队得分使用稀疏奖励，塑形奖励单独保存。
+
+#### HuCooked 三人局与同步对接
+
+在 `hucooked-project` 中，从 `replay_frontend` 目录执行以下命令。已有本项目的 `.conda` 环境时，直接使用现有环境。
+
+```powershell
+conda create --prefix ./.conda -c conda-forge --override-channels python=3.10 pip
+conda run -p ./.conda python -m pip install -e ../hucooked -c constraints-replay.txt
+conda run -p ./.conda python -m pip install -e . --no-deps
+conda run -p ./.conda python -m better_overcooked_replay samples --out output/samples
+```
+
+在回放器打开 `output/samples/three_player_sync_handoff.ocrep.json`。示例第 2 步只有蓝方按交互键，第 3 步蓝方把洋葱交给绿方，同时橙方拿盘。对接台以双向箭头标记，失败时亮橙色，成功时亮绿色，侧栏显示失败原因或交接方向。可用 `conda run -p ./.conda python examples/record_episode.py --layout three_player_handoff` 录制普通三人局。
+
+HuCooked 的 `info` 已包含 `event_infos` 和 `sync_handoffs`。将其原样交给 `recorder.append()` 即可记录对接台位、参与者、交接方向和失败原因。标准轨迹导入也可读取 `ep_infos`。旧双人回放可直接打开。
 
 ### 转换旧轨迹或生成样例
 
@@ -107,7 +122,7 @@ python -m venv .venv
 
 转换器保留已有时间戳，多局输入会拆成多个文件。缺帧作为间隔标记，末态只有在显式规则下验证过状态转移与奖励后才补算。验证失败时保留到最后已知状态，把未恢复的动作写入诊断。只有视频、RGB 图像或得分时，缺少重建 3D 对局所需的状态。
 
-历史导入主要根据状态变化推断事件，交付音效和庆祝可能缺失。需要完整交互事件时，优先直接记录 `env.step()`。
+标准轨迹导入会保留 `ep_infos` 中的事件和塑形奖励。缺少该字段时，转换器根据前后状态补充部分事件，同步对接失败原因和交付庆祝可能缺失。需要完整交互事件时，优先直接记录 `env.step()`。
 
 </details>
 

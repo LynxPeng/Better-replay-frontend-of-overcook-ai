@@ -8,10 +8,12 @@ namespace OvercookedReplay {
 // It never executes actions, advances cooking or assigns rewards.
 public sealed class InteractionHints : MonoBehaviour {
     [Serializable] class RecipeParameters {public int max_num_ingredients=3;}
-    sealed class Patch {public MeshRenderer blue,orange;public int mask;}
+    sealed class Patch {public MeshRenderer[] renderers;public int mask;}
     readonly Dictionary<Vector2Int,Patch> patches=new Dictionary<Vector2Int,Patch>();
     readonly Dictionary<Vector2Int,int> targets=new Dictionary<Vector2Int,int>();
-    static Mesh full,left,right;static Material blue,orange;
+    static Mesh[][] slices;
+    static Material blue,orange,green;
+    public int PlayerCount {get;set;}=2;
     public static bool TryTarget(ReplayHeader header,Snapshot state,int agent,out Vector2Int target){
         target=default;
         if(state?.players==null||agent<0||agent>=state.players.Length||header?.terrain==null)return false;
@@ -38,40 +40,63 @@ public sealed class InteractionHints : MonoBehaviour {
         mat.SetColor("_BaseColor",colour);
         mat.renderQueue=(int)RenderQueue.Transparent+5;return mat;
     }
-    static Mesh Shape(int side){
+    static List<Vector3> Clip(List<Vector3> polygon,float edge,int side){
+        var clipped=new List<Vector3>();var previous=polygon[polygon.Count-1];bool was=(previous.x-edge)*side>=0;
+        foreach(var point in polygon){
+            bool inside=(point.x-edge)*side>=0;
+            if(inside!=was)clipped.Add(Vector3.Lerp(previous,point,(edge-previous.x)/(point.x-previous.x)));
+            if(inside)clipped.Add(point);
+            previous=point;was=inside;
+        }
+        return clipped;
+    }
+    static Mesh Shape(int slice,int count){
         float half=CafeSurfaceStyle.CounterWidth*Mathf.Sqrt(.8f)*.5f,radius=.035f;var polygon=new List<Vector3>();
         for(int corner=0;corner<4;corner++)for(int i=0;i<=8;i++){
             float angle=(corner+i/8f)*Mathf.PI*.5f;
             var centre=new Vector2(corner==0||corner==3?half-radius:-half+radius,corner<2?half-radius:-half+radius);
             polygon.Add(new Vector3(centre.x+Mathf.Cos(angle)*radius,0,centre.y+Mathf.Sin(angle)*radius));
         }
-        if(side!=0){
-            var clipped=new List<Vector3>();var previous=polygon[polygon.Count-1];bool was=previous.x*side>=0;
-            foreach(var point in polygon){bool inside=point.x*side>=0;if(inside!=was)clipped.Add(Vector3.Lerp(previous,point,-previous.x/(point.x-previous.x)));if(inside)clipped.Add(point);previous=point;was=inside;}polygon=clipped;
-        }
-        var vertices=new List<Vector3>{Vector3.zero};vertices.AddRange(polygon);var triangles=new List<int>();
+        float width=2*half/count;
+        if(slice>0)polygon=Clip(polygon,-half+slice*width,1);
+        if(slice<count-1)polygon=Clip(polygon,-half+(slice+1)*width,-1);
+        var centrePoint=new Vector3(-half+(slice+.5f)*width,0,0);
+        var vertices=new List<Vector3>{centrePoint};vertices.AddRange(polygon);var triangles=new List<int>();
         for(int i=0;i<polygon.Count;i++){triangles.Add(0);triangles.Add(1+(i+1)%polygon.Count);triangles.Add(1+i);}
         var mesh=new Mesh{name="Central 80 percent interaction target"};mesh.SetVertices(vertices);mesh.SetTriangles(triangles,0);mesh.RecalculateNormals();mesh.RecalculateBounds();return mesh;
     }
     public void Register(Vector2Int tile,GameObject station){
-        if(!full){full=Shape(0);left=Shape(-1);right=Shape(1);}
+        if(slices==null)slices=new[]{new[]{Shape(0,1)},new[]{Shape(0,2),Shape(1,2)},
+                                    new[]{Shape(0,3),Shape(1,3),Shape(2,3)}};
         if(!blue){blue=Resources.Load<Material>("Materials/InteractionHintBlue");orange=Resources.Load<Material>("Materials/InteractionHintOrange");
             if(!blue||!orange)throw new InvalidOperationException("Run InteriorMaterialAssets.Prepare to create interaction hint materials");}
         var surface=station.GetComponentInChildren<RoundedWorktop>();if(!surface)return;
         var point=surface.transform.TransformPoint(new Vector3(0,surface.SurfaceY,0))+Vector3.up*.003f;
         MeshRenderer Create(string name,Material material){
             var g=new GameObject(name);g.transform.SetParent(station.transform,false);g.transform.position=point;
-            g.AddComponent<MeshFilter>().sharedMesh=full;var renderer=g.AddComponent<MeshRenderer>();renderer.sharedMaterial=material;
+            g.AddComponent<MeshFilter>().sharedMesh=slices[0][0];var renderer=g.AddComponent<MeshRenderer>();renderer.sharedMaterial=material;
             renderer.shadowCastingMode=ShadowCastingMode.Off;renderer.receiveShadows=false;g.SetActive(false);return renderer;
         }
-        patches[tile]=new Patch{blue=Create("Blue interaction target",blue),orange=Create("Orange interaction target",orange)};
+        var renderers=new MeshRenderer[PlayerCount];
+        renderers[0]=Create("Blue interaction target",blue);
+        renderers[1]=Create("Orange interaction target",orange);
+        if(PlayerCount==3){
+            if(!green){green=new Material(blue);green.SetColor("_BaseColor",new Color(.30f,.89f,.46f,.52f));}
+            renderers[2]=Create("Green interaction target",green);
+        }
+        patches[tile]=new Patch{renderers=renderers};
     }
     public void Refresh(ReplayHeader header,Snapshot snapshot){
-        targets.Clear();for(int agent=0;agent<2;agent++)if(TryTarget(header,snapshot,agent,out var tile))targets[tile]=(targets.TryGetValue(tile,out int mask)?mask:0)|(1<<agent);
+        targets.Clear();for(int agent=0;agent<PlayerCount;agent++)if(TryTarget(header,snapshot,agent,out var tile))targets[tile]=(targets.TryGetValue(tile,out int mask)?mask:0)|(1<<agent);
         foreach(var pair in patches){
             var p=pair.Value;int mask=targets.TryGetValue(pair.Key,out int active)?active:0;if(mask==p.mask)continue;p.mask=mask;
-            p.blue.GetComponent<MeshFilter>().sharedMesh=mask==3?left:full;p.orange.GetComponent<MeshFilter>().sharedMesh=mask==3?right:full;
-            p.blue.gameObject.SetActive((mask&1)!=0);p.orange.gameObject.SetActive((mask&2)!=0);
+            int count=0,slice=0;
+            for(int agent=0;agent<p.renderers.Length;agent++)if((mask&(1<<agent))!=0)count++;
+            for(int agent=0;agent<p.renderers.Length;agent++){
+                var renderer=p.renderers[agent];bool visible=(mask&(1<<agent))!=0;
+                if(visible)renderer.GetComponent<MeshFilter>().sharedMesh=slices[count-1][slice++];
+                renderer.gameObject.SetActive(visible);
+            }
         }
     }
 }

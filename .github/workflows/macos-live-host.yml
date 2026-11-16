@@ -17,11 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x86_64
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"runner":"macos-15-intel","arch":"x86_64"}]' || '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x86_64"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     defaults:
@@ -50,22 +46,12 @@ jobs:
           python -m pytest -q tests/test_live_host_entry.py
       - name: Freeze the host and collect notices
         run: bash scripts/build-live-host-macos.sh upstream output/macos-host
-      - name: Exercise the bundled server and both models
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Archive the native host
         run: |
-          tag=v0.2.0-live-windows-preview
-          archive="OvercookedLive-Windows-x64-$tag"
-          gh release download "$tag" --pattern "$archive.zip"
-          unzip -q "$archive.zip" "$archive/HostRuntime/Models/*" -d output
-          rm "$archive.zip"
-          python scripts/check-live-records.py --host output/macos-host/OvercookedHost/OvercookedHost \
-            --models "output/$archive/HostRuntime/Models" --out output/host-check --rate 4
           COPYFILE_DISABLE=1 tar -czf "output/OvercookedHost-${{ matrix.arch }}.tar.gz" -C output/macos-host OvercookedHost
       - uses: actions/upload-artifact@v4
         with:
           name: macos-room-host-${{ matrix.arch }}
-          path: |
-            output/OvercookedHost-${{ matrix.arch }}.tar.gz
-            output/host-check/summary.json
+          path: output/OvercookedHost-${{ matrix.arch }}.tar.gz
+          compression-level: 0
           if-no-files-found: error

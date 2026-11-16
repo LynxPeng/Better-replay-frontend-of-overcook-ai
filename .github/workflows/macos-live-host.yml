@@ -60,7 +60,7 @@ jobs:
           unzip -q "$archive.zip" "$archive/HostRuntime/Models/*" -d output
           rm "$archive.zip"
           python scripts/check-live-records.py --host output/macos-host/OvercookedHost/OvercookedHost \
-            --models "output/$archive/HostRuntime/Models" --out output/host-check --rate 12
+            --models "output/$archive/HostRuntime/Models" --out output/host-check --rate 4
           COPYFILE_DISABLE=1 tar -czf "output/OvercookedHost-${{ matrix.arch }}.tar.gz" -C output/macos-host OvercookedHost
       - uses: actions/upload-artifact@v4
         with:

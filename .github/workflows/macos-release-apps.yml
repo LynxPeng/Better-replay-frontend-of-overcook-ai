@@ -56,10 +56,16 @@ jobs:
             codesign --force --sign - "$app"
             codesign --verify --deep --strict --verbose=2 "$app"
             ditto -c -k --sequesterRsrc "$folder" "signed/$name"
+            roundtrip="$(mktemp -d)"
+            ditto -x -k "signed/$name" "$roundtrip"
+            codesign --verify --deep --strict --verbose=2 "$roundtrip/$(basename "$app")"
           done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sealed-macos-release-apps
-          path: signed/*.zip
-          compression-level: 0
-          if-no-files-found: error
+      - name: Replace the draft ZIPs with signed packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          shasum -a 256 signed/*.zip
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "signed/BetterReplay-macOS-Universal-$RELEASE_TAG.zip#macOS Universal 回放器" \
+            "signed/OvercookedLive-macOS-Universal-$RELEASE_TAG.zip#macOS Universal 完整联机版"

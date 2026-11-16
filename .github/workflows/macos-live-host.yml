@@ -44,8 +44,8 @@ jobs:
       - name: Prepare the host environment
         run: |
           git -C upstream apply ../patches/upstream-event-info.patch
-          conda install -y 'pytorch=2.9.1=cpu_generic*' 'numpy=1.26.4' 'scipy=1.15.3' pip
-          python -m pip install -c constraints-replay.txt ./upstream 'stable-baselines3==2.9.2' 'pyinstaller==6.16.0' pytest
+          conda install -y 'pytorch=2.9.1=cpu_generic*' 'numpy=1.26.4' pip
+          python -m pip install -c constraints-replay.txt ./upstream 'scipy==1.15.3' 'stable-baselines3==2.9.2' 'pyinstaller==6.16.0' pytest
           python -m pip install --no-deps -e .
           python -m pytest -q tests/test_live_host_entry.py
       - name: Freeze the host and collect notices
@@ -61,7 +61,7 @@ jobs:
           rm "$archive.zip"
           python scripts/check-live-records.py --host output/macos-host/OvercookedHost/OvercookedHost \
             --models "output/$archive/HostRuntime/Models" --out output/host-check --rate 12
-          tar -czf "output/OvercookedHost-${{ matrix.arch }}.tar.gz" -C output/macos-host OvercookedHost
+          COPYFILE_DISABLE=1 tar -czf "output/OvercookedHost-${{ matrix.arch }}.tar.gz" -C output/macos-host OvercookedHost
       - uses: actions/upload-artifact@v4
         with:
           name: macos-room-host-${{ matrix.arch }}

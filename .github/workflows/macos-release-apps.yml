@@ -77,7 +77,7 @@ jobs:
           test -s "$runtime/Models/ppo-final.zip"
           test -s "$runtime/Models/sp-cramped-room.npz"
           executable="$(plutil -extract CFBundleExecutable raw -o - "$plist")"
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/$executable"
+          lipo "$app/Contents/MacOS/$executable" -verify_arch arm64 x86_64
           /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0" "$plist"
           /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Join cooperative kitchen rooms on the local network." "$plist"
           codesign --force --sign - "$app"

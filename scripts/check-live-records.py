@@ -93,7 +93,7 @@ def verify(record_path, frame_log, segment_log, identities, fixture, cfg):
     return score
 
 
-async def room(folder, models, fixture, mode, host_slot, rate):
+async def room(folder, models, fixture, mode, host_slot, rate, host_command):
     name = f"{mode}-host{host_slot}"
     folder = folder / name
     folder.mkdir(parents=True, exist_ok=False)
@@ -103,7 +103,7 @@ async def room(folder, models, fixture, mode, host_slot, rate):
     clients = []
     with (folder / "service.log").open("wb") as log:
         service = await asyncio.create_subprocess_exec(
-            sys.executable, "-u", "-m", "better_overcooked_replay.live_server",
+            *host_command,
             "--port", "0", "--bind", "127.0.0.1", "--models", str(models),
             "--records", str(folder / "records"), "--ready-file", str(ready),
             "--host-token-file", str(token_path), "--stop-file", str(stop), stdout=log, stderr=log)
@@ -192,7 +192,9 @@ async def run(options):
     fixture = load_replay(Path(__file__).resolve().parents[1] /
         "unity/OvercookedViewer/Assets/StreamingAssets/Samples/upstream-sp-220.ocrep.json")["segments"]
     cases = [("human_human", 1), ("human_ai", 0), ("human_ai", 1), ("ai_ai", 0)]
-    outcomes = await asyncio.gather(*(room(folder, options.models.resolve(), fixture, mode, slot, options.rate)
+    command = ([str(options.host.resolve(strict=True))] if options.host else
+               [sys.executable, "-u", "-m", "better_overcooked_replay.live_server"])
+    outcomes = await asyncio.gather(*(room(folder, options.models.resolve(), fixture, mode, slot, options.rate, command)
                                      for mode, slot in cases), return_exceptions=True)
     for outcome in outcomes:
         if isinstance(outcome, BaseException):
@@ -204,5 +206,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--models", type=Path, required=True)
+    parser.add_argument("--host", type=Path, help="Test a packaged host executable")
     parser.add_argument("--rate", type=int, choices=range(1, 13), default=2)
     asyncio.run(run(parser.parse_args()))

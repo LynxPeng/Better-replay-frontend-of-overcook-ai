@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using UnityEngine;
 
@@ -9,14 +10,25 @@ public sealed partial class LiveClient {
     [Serializable] sealed class RoomReady { public int port; }
 
     Process localRoom;
-    string runtimeDirectory, readyFile, tokenFile, stopFile, roomLog;
+    string hostExecutable, runtimeDirectory, readyFile, tokenFile, stopFile, roomLog;
     float roomStartupDeadline;
     bool CanCreateRoom => runtimeDirectory != null;
     bool StartingLocalRoom => readyFile != null;
 
     void FindPortableHost() {
-        string directory=Path.Combine(Path.GetDirectoryName(Application.dataPath), "HostRuntime");
-        if(File.Exists(Path.Combine(directory,"OvercookedHost.exe")))runtimeDirectory=directory;
+        var platform=Application.platform;
+        var architecture=RuntimeInformation.ProcessArchitecture==Architecture.Arm64?"arm64":"x86_64";
+        var executable=PortableHostPath(Application.dataPath,platform,architecture);
+        if(!File.Exists(executable))return;
+        hostExecutable=executable;
+        var executableDirectory=Path.GetDirectoryName(executable);
+        runtimeDirectory=platform==RuntimePlatform.OSXPlayer?Path.GetDirectoryName(executableDirectory):executableDirectory;
+    }
+
+    static string PortableHostPath(string dataPath,RuntimePlatform platform,string architecture) {
+        if(platform==RuntimePlatform.OSXPlayer)
+            return Path.Combine(dataPath,"Resources","HostRuntime",architecture,"OvercookedHost");
+        return Path.Combine(Path.GetDirectoryName(dataPath),"HostRuntime","OvercookedHost.exe");
     }
 
     void CreateLocalRoom() {
@@ -40,7 +52,7 @@ public sealed partial class LiveClient {
                 "--host-token-file",tokenFile,"--ready-file",readyFile,"--stop-file",stopFile,
                 "--log-file",roomLog,"--records",Path.Combine(data,"records"),
                 "--models",Path.Combine(runtimeDirectory,"Models")};
-            var launch=new ProcessStartInfo(Path.Combine(runtimeDirectory,"OvercookedHost.exe")) {
+            var launch=new ProcessStartInfo(hostExecutable) {
                 Arguments=string.Join(" ",Array.ConvertAll(arguments,argument=>"\""+argument+"\"")),
                 WorkingDirectory=runtimeDirectory,UseShellExecute=false,CreateNoWindow=true
             };

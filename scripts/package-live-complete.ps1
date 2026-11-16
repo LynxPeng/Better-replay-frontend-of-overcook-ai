@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory=$true)][string]$HostDirectory,
     [Parameter(Mandatory=$true)][string]$Workspace,
     [Parameter(Mandatory=$true)][string]$PyInstallerPath,
+    [string[]]$CondaPackageCache=@(),
     [string]$OutputDirectory,
     [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+[a-z0-9-]*$')][string]$Version='v0.2.0-live-windows-preview'
 )
@@ -65,8 +66,12 @@ foreach($metadata in (Get-ChildItem -LiteralPath (Join-Path $prefix 'conda-meta'
     $distribution=Get-Content -LiteralPath $metadata.FullName -Raw | ConvertFrom-Json
     $bundledFiles=$distribution.files | Where-Object { $dllNames.Contains([IO.Path]::GetFileName($_)) }
     if(!$bundledFiles){continue}
-    $licensePath=Join-Path $distribution.extracted_package_dir 'info\licenses'
-    if(!(Test-Path -LiteralPath $licensePath -PathType Container)) {
+    $packageDirectories=@($distribution.extracted_package_dir)
+    $packageDirectories+=@($CondaPackageCache | ForEach-Object { Join-Path $_ $metadata.BaseName })
+    $licensePath=$packageDirectories | Where-Object { $_ } |
+        ForEach-Object { Join-Path $_ 'info\licenses' } |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Container } | Select-Object -First 1
+    if(!$licensePath) {
         throw "Missing native runtime license in the conda package cache: $($distribution.name)"
     }
     $destination=Join-Path $notices ('conda-'+$metadata.BaseName)

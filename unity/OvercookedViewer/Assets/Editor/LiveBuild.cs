@@ -7,9 +7,9 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 
 public static class LiveBuild {
-    const string Scene = "Assets/Scenes/Live.unity";
+    internal const string Scene = "Assets/Scenes/Live.unity";
 
-    public static void Build() {
+    internal static void Prepare() {
         // Only bootstrap the new scene once. Subsequent builds preserve scene edits.
         if (!File.Exists(Scene) && !AssetDatabase.CopyAsset("Assets/Scenes/Replay.unity", Scene))
             throw new IOException("Could not create live scene");
@@ -33,6 +33,11 @@ public static class LiveBuild {
         ReplayChecks.SerializerRegression();
         Directory.CreateDirectory("../../output");
         ReplayChecks.Run();
+    }
+
+    public static void Build() {
+        PlatformResourceChecks.ReimportCharacters();
+        Prepare();
         var destination = Environment.GetEnvironmentVariable("BETTER_REPLAY_LIVE_BUILD");
         if (String.IsNullOrEmpty(destination))
             destination = Path.GetFullPath("../../output/Live/OvercookedLive.exe");

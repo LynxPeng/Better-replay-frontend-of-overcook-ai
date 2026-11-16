@@ -5,6 +5,12 @@ using UnityEngine;
 using OvercookedReplay;
 
 public static class PlatformResourceChecks {
+    public static void ReimportCharacters() {
+        // First imports may precede the shaders required by UniGLTF and UniVRM.
+        foreach(string path in new[]{GuguGagaBootstrap.ModelPath,BlueFishBootstrap.ModelPath})
+            if(File.Exists(path))AssetDatabase.ImportAsset(path,ImportAssetOptions.ForceUpdate);
+    }
+
     public static void Prepare() {
         string directory="Assets/Resources/RecipeIcons";
         Directory.CreateDirectory(directory);

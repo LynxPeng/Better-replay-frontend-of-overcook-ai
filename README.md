@@ -150,7 +150,7 @@ if ($LASTEXITCODE -eq 0) { git -C $upstream apply $patch }
 | [`examples/`](examples) · [`tests/`](tests) | 接入示例和 Python 回归 |
 | [`scripts/`](scripts) · [`docs/`](docs) | 构建、打包、验收和使用说明 |
 
-重建需要 **Unity 6000.6.8f1、URP 17.6** 及本地美术资源。按 [资源说明](unity/ASSET_SOURCES.md) 导入 Restaurant Bits for Unity、Cartoon Town 和 Synty Simple Sky，保留资产的 `.meta` GUID。联机构建还需要本地角色预制体。准备好资源后，从本仓库根目录运行 Windows 构建。
+重建需要 **Unity 6000.6.9f1、URP 17.6** 及本地美术资源。按 [资源说明](unity/ASSET_SOURCES.md) 导入 Restaurant Bits for Unity、Cartoon Town 和 Synty Simple Sky，保留资产的 `.meta` GUID。联机构建还需要本地角色预制体。准备好资源后，从本仓库根目录运行 Windows 构建。
 
 ```powershell
 .\scripts\build-windows.ps1
@@ -160,6 +160,7 @@ if ($LASTEXITCODE -eq 0) { git -C $upstream apply $patch }
 
 - **联机开发和便携包重建**见 [Windows 实时对局开发指南](LIVE-QUICKSTART.md)。
 - **macOS 重建**在 Windows 的同版本 Unity 中安装 macOS Build Support (Mono)，运行 [`build-macos.ps1`](scripts/build-macos.ps1)，再用 [`package-macos.py`](scripts/package-macos.py) 打包 `output/macOS/OvercookedReplay.app`。[Mac 构建与验收](docs/MACOS_VALIDATION.md)
+- **macOS 完整联机版**用 `build-macos.ps1 -Live` 构建客户端。用 [macOS 房主工作流](.github/workflows/macos-live-host.yml) 构建两种架构的便携房主。将两个房主归档和模型目录传给 `package-macos.py`，再在 macOS 上为完整应用重新签名。[macOS 联机使用说明](MACOS-LIVE-QUICKSTART.md)
 - **Python 回归**在 Python 3.10 环境安装 `.[test]` 后运行 `python -m pytest tests -q`。训练适配依赖列在 [`pyproject.toml`](pyproject.toml) 的 `train` 额外依赖中。
 
 ## 许可证与署名

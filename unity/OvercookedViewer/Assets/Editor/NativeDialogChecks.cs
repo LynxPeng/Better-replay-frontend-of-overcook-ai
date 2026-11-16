@@ -39,6 +39,7 @@ public static class NativeDialogChecks {
         if(Marshal.OffsetOf(type,name).ToInt32()!=expected)throw new Exception("Wrong native offset: "+name);
     }
     public static void Build() {
+        PlatformResourceChecks.ReimportCharacters();
         Abi();ReplayChecks.SerializerRegression();ReplayChecks.Run();
         string location=Path.GetFullPath("../../output/Windows/OvercookedReplay.exe");
         var report=BuildPipeline.BuildPlayer(new[]{"Assets/Scenes/Replay.unity"},location,BuildTarget.StandaloneWindows64,BuildOptions.None);

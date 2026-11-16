@@ -1,8 +1,10 @@
 """A Windows-produced app archive must retain executable bits on macOS."""
 import importlib.util
+import io
 import plistlib
 import stat
 import struct
+import tarfile
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -67,3 +69,25 @@ def test_refuses_to_overwrite_existing_archive(tmp_path):
     with pytest.raises(FileExistsError):
         module.archive_app(make_app(tmp_path), archive)
     assert archive.read_bytes() == b"existing release"
+
+
+def test_live_host_preserves_posix_modes_and_links(tmp_path):
+    module = load_packager()
+    source = tmp_path / "host.tar.gz"
+    with tarfile.open(source, "w:gz") as host:
+        executable = tarfile.TarInfo("OvercookedHost/OvercookedHost")
+        executable.mode, executable.size = 0o755, 4
+        host.addfile(executable, io.BytesIO(b"host"))
+        link = tarfile.TarInfo("OvercookedHost/_internal/lib.dylib")
+        link.type, link.linkname = tarfile.SYMTYPE, "torch/lib/lib.dylib"
+        host.addfile(link)
+
+    archive = tmp_path / "mac.zip"
+    module.archive_app(make_app(tmp_path), archive, hosts=(("arm64", source),))
+    prefix = "OvercookedReplay.app/Contents/Resources/HostRuntime/arm64/"
+    with ZipFile(archive) as bundle:
+        executable = bundle.getinfo(prefix + "OvercookedHost")
+        assert stat.S_IMODE(executable.external_attr >> 16) == 0o755
+        link = bundle.getinfo(prefix + "_internal/lib.dylib")
+        assert stat.S_ISLNK(link.external_attr >> 16)
+        assert bundle.read(link) == b"torch/lib/lib.dylib"

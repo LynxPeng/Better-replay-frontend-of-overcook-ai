@@ -1,5 +1,5 @@
 param(
-    [string]$UnityEditor='C:\Program Files\Unity\Hub\Editor\6000.6.8f1\Editor\Unity.exe',
+    [string]$UnityEditor='C:\Program Files\Unity\Hub\Editor\6000.6.9f1\Editor\Unity.exe',
     [string]$OutputRoot
 )
 $ErrorActionPreference = 'Stop'

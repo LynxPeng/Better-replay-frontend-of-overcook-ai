@@ -2,9 +2,12 @@
 import argparse
 import hashlib
 import plistlib
+import posixpath
+import shutil
 import stat
 import struct
-from pathlib import Path
+import tarfile
+from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 
@@ -48,7 +51,44 @@ def validate_app(app):
     return executable
 
 
-def archive_app(app, destination, extras=()):
+def archive_host(archive, directory, source):
+    has_executable = False
+    with tarfile.open(source, "r|gz") as host:
+        for member in host:
+            path = PurePosixPath(member.name)
+            if not path.parts or path.parts[0] != "OvercookedHost" or ".." in path.parts:
+                raise ValueError(f"Unexpected host member: {member.name}")
+            relative = path.relative_to("OvercookedHost")
+            name = (directory / relative).as_posix()
+            info = ZipInfo(name + ("/" if member.isdir() else ""))
+            info.create_system = 3
+            if member.isdir():
+                info.external_attr = ((stat.S_IFDIR | member.mode) << 16) | 0x10
+                archive.writestr(info, b"")
+            elif member.issym() or member.islnk():
+                link = member.linkname
+                if member.islnk():
+                    link = posixpath.relpath(link, path.parent.as_posix())
+                resolved = posixpath.normpath(posixpath.join(path.parent.as_posix(), link))
+                if not resolved.startswith("OvercookedHost/"):
+                    raise ValueError(f"Host link escapes its directory: {member.name}")
+                info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                archive.writestr(info, link.encode("utf-8"))
+            elif member.isfile():
+                info.external_attr = (stat.S_IFREG | member.mode) << 16
+                info.compress_type = ZIP_DEFLATED
+                info.file_size = member.size
+                with host.extractfile(member) as stream, archive.open(info, "w") as target:
+                    shutil.copyfileobj(stream, target, 1024 * 1024)
+                if relative.as_posix() == "OvercookedHost":
+                    has_executable = bool(member.mode & stat.S_IXUSR)
+            else:
+                raise ValueError(f"Unsupported host member: {member.name}")
+    if not has_executable:
+        raise ValueError(f"Missing executable in {source}")
+
+
+def archive_app(app, destination, extras=(), hosts=()):
     app, destination = Path(app), Path(destination)
     executable = validate_app(app)
     # Exclusive creation protects previously published artifacts.
@@ -76,7 +116,10 @@ def archive_app(app, destination, extras=()):
             info.create_system = 3
             info.external_attr = (stat.S_IFREG | 0o644) << 16
             info.compress_type = ZIP_DEFLATED
-            archive.writestr(info, Path(source).read_bytes())
+            with Path(source).open("rb") as stream, archive.open(info, "w") as target:
+                shutil.copyfileobj(stream, target, 1024 * 1024)
+        for arch, source in hosts:
+            archive_host(archive, PurePosixPath(app.name) / "Contents/Resources/HostRuntime" / arch, source)
 
 
 def main():
@@ -84,19 +127,39 @@ def main():
     parser.add_argument("app", type=Path)
     parser.add_argument("--version", default="v0.1.3-macos-preview")
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--host-arm64", type=Path)
+    parser.add_argument("--host-x86-64", type=Path)
+    parser.add_argument("--models", type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     executable = validate_app(args.app)
     architectures = macho_architectures(executable)
     if architectures != {"x86_64", "arm64"}:
         raise ValueError(f"Universal app expected, found {sorted(architectures)}")
-    destination = args.out or repo / "release" / f"BetterReplay-macOS-Universal-{args.version}.zip"
+    live = args.app.name == "OvercookedLive.app"
+    host_args = (args.host_arm64, args.host_x86_64, args.models)
+    if live and not all(host_args):
+        parser.error("The complete online app needs both --host archives and --models")
+    if not live and any(host_args):
+        parser.error("Host archives are only used by OvercookedLive.app")
+    product = "OvercookedLive" if live else "BetterReplay"
+    destination = args.out or repo / "release" / f"{product}-macOS-Universal-{args.version}.zip"
     destination.parent.mkdir(parents=True, exist_ok=True)
     extras = [(repo / name, name) for name in ("LICENSE", "THIRD_PARTY_NOTICES.md")]
     extras += [(path, path.relative_to(repo).as_posix()) for path in sorted((repo / "LICENSES").rglob("*")) if path.is_file()]
-    extras += [(repo / "MACOS-QUICKSTART.md", "README.md")]
+    quickstart = "MACOS-LIVE-QUICKSTART.md" if live else "MACOS-QUICKSTART.md"
+    extras += [(repo / quickstart, "README.md")]
     extras += [(repo / "unity/OvercookedViewer/Assets/StreamingAssets/CharacterCredits.txt", "CharacterCredits.txt")]
-    archive_app(args.app, destination, extras)
+    hosts = ()
+    if live:
+        hosts = (("arm64", args.host_arm64), ("x86_64", args.host_x86_64))
+        runtime = f"{args.app.name}/Contents/Resources/HostRuntime"
+        extras += [(args.models / name, f"{runtime}/Models/{name}")
+                   for name in ("ppo-final.zip", "sp-cramped-room.npz")]
+    for source in [path for path, _ in extras] + [path for _, path in hosts]:
+        if not source.is_file():
+            raise FileNotFoundError(source)
+    archive_app(args.app, destination, extras, hosts)
     hasher = hashlib.sha256()
     with destination.open("rb") as stream:
         while block := stream.read(1024 * 1024):

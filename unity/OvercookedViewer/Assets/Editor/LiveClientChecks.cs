@@ -16,6 +16,18 @@ public static class LiveClientChecks {
         throw new Exception("Invalid wire frame was accepted: "+typeof(T).Name);
     }
     public static void Run() {
+        var hostPath=typeof(LiveClient).GetMethod("PortableHostPath",BindingFlags.Static|BindingFlags.NonPublic);
+        if(hostPath==null)throw new Exception("Missing cross-platform portable host path");
+        string dataPath=Path.Combine("Test App.app","Contents");
+        foreach(string architecture in new[]{"arm64","x86_64"}) {
+            string expected=Path.Combine(dataPath,"Resources","HostRuntime",architecture,"OvercookedHost");
+            if((string)hostPath.Invoke(null,new object[]{dataPath,RuntimePlatform.OSXPlayer,architecture})!=expected)
+                throw new Exception("Wrong macOS host path for "+architecture);
+        }
+        string windowsData=Path.Combine("Live","OvercookedLive_Data");
+        string windowsHost=Path.Combine("Live","HostRuntime","OvercookedHost.exe");
+        if((string)hostPath.Invoke(null,new object[]{windowsData,RuntimePlatform.WindowsPlayer,"x86_64"})!=windowsHost)
+            throw new Exception("Wrong Windows host path");
         if(!LiveClient.TryEndpoint(" 192.168.1.45:9001 ","8765",out var server,out var port)||server!="192.168.1.45"||port!=9001
             ||!LiveClient.TryEndpoint("kitchen-laptop","8765",out server,out port)||server!="kitchen-laptop"||port!=8765
             ||LiveClient.TryEndpoint("192.168.1.45:70000","8765",out server,out port))

@@ -1,10 +1,18 @@
-name: Seal and verify macOS release apps
+name: Sign and publish the macOS live package
 
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: Draft release tag with both macOS ZIPs
+      release_tag:
+        description: Published release to receive the signed package
+        required: true
+        type: string
+      arm64_run:
+        description: Build run ID for the Apple Silicon room host
+        required: true
+        type: string
+      intel_run:
+        description: Build run ID for the Intel room host
         required: true
         type: string
   push:
@@ -12,60 +20,92 @@ on:
     paths: [".github/workflows/macos-release-apps.yml"]
 
 permissions:
-  contents: read
+  actions: read
+  contents: write
 
 env:
-  RELEASE_TAG: ${{ inputs.tag || 'v0.2.1' }}
+  RELEASE_TAG: ${{ inputs.release_tag || 'v0.2.1' }}
+  ARM64_RUN: ${{ inputs.arm64_run || '43818192029' }}
+  INTEL_RUN: ${{ inputs.intel_run || '43821202014' }}
 
 jobs:
-  seal:
+  package:
     runs-on: macos-15
-    timeout-minutes: 25
-    permissions:
-      contents: write
+    timeout-minutes: 30
     steps:
-      - name: Download draft inputs
+      - name: Download the Unity app and the saved room hosts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for attempt in {1..60}; do
-            count="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
-              --jq '[.assets[] | select(.name | contains("-macOS-Universal-"))] | length')"
-            if [[ "$count" == 2 ]]; then
-              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "*-macOS-Universal-$RELEASE_TAG.zip" --dir input
-              exit
-            fi
+          staging_tag="$RELEASE_TAG-mac-staging"
+          test "$(gh release view "$staging_tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+          gh release download "$staging_tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern "OvercookedLive-macOS-input-$RELEASE_TAG.zip" --dir inputs
+          gh run download "$ARM64_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name macos-room-host-arm64 --dir inputs/arm64
+          for attempt in {1..72}; do
+            status="$(gh run view "$INTEL_RUN" --repo "$GITHUB_REPOSITORY" --json status,conclusion \
+              --jq '[.status,.conclusion] | join(":")')"
+            case "$status" in
+              completed:success)
+                gh run download "$INTEL_RUN" --repo "$GITHUB_REPOSITORY" \
+                  --name macos-room-host-x86_64 --dir inputs/x86_64
+                exit
+                ;;
+              completed:*) echo "Intel room host build ended with $status"; exit 1 ;;
+            esac
             sleep 15
           done
-          echo "The draft needs both macOS ZIPs."
+          echo "Timed out waiting for the Intel build."
           exit 1
-      - name: Seal apps after adding the portable room runtimes
+
+      - name: Assemble and sign the Universal app
         run: |
-          mkdir -p signed
-          for product in BetterReplay OvercookedLive; do
-            name="$product-macOS-Universal-$RELEASE_TAG.zip"
-            folder="$(mktemp -d)"
-            ditto -x -k "input/$name" "$folder"
-            if [[ "$product" == "OvercookedLive" ]]; then
-              app="$folder/OvercookedLive.app"
-              /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0" "$app/Contents/Info.plist"
-              /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Join cooperative kitchen rooms on the local network." "$app/Contents/Info.plist"
-            else
-              app="$folder/OvercookedReplay.app"
-            fi
-            codesign --force --sign - "$app"
-            codesign --verify --deep --strict --verbose=2 "$app"
-            ditto -c -k --sequesterRsrc "$folder" "signed/$name"
-            roundtrip="$(mktemp -d)"
-            ditto -x -k "signed/$name" "$roundtrip"
-            codesign --verify --deep --strict --verbose=2 "$roundtrip/$(basename "$app")"
+          folder="$(mktemp -d)"
+          ditto -x -k "inputs/OvercookedLive-macOS-input-$RELEASE_TAG.zip" "$folder"
+          app="$folder/OvercookedLive.app"
+          plist="$app/Contents/Info.plist"
+          runtime="$app/Contents/Resources/HostRuntime"
+          for arch in arm64 x86_64; do
+            mkdir -p "$runtime/$arch"
+            tar -xzf "inputs/$arch/OvercookedHost-$arch.tar.gz" -C "$runtime/$arch" --strip-components=1
+            host="$runtime/$arch/OvercookedHost"
+            test -x "$host"
+            test "$(lipo -archs "$host")" = "$arch"
+            codesign --verify --strict "$host"
           done
-      - name: Replace the draft ZIPs with signed packages
+          test -s "$runtime/Models/ppo-final.zip"
+          test -s "$runtime/Models/sp-cramped-room.npz"
+          executable="$(plutil -extract CFBundleExecutable raw -o - "$plist")"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/$executable"
+          /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0" "$plist"
+          /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Join cooperative kitchen rooms on the local network." "$plist"
+          codesign --force --sign - "$app"
+          mkdir -p signed
+          ditto -c -k --sequesterRsrc "$folder" "signed/OvercookedLive-macOS-Universal-$RELEASE_TAG.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-macos-live-universal
+          path: signed/*.zip
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Verify the saved archive and add it to the existing release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
-          shasum -a 256 signed/*.zip
-          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-            "signed/BetterReplay-macOS-Universal-$RELEASE_TAG.zip#macOS Universal 回放器" \
-            "signed/OvercookedLive-macOS-Universal-$RELEASE_TAG.zip#macOS Universal 完整联机版"
+          archive="signed/OvercookedLive-macOS-Universal-$RELEASE_TAG.zip"
+          roundtrip="$(mktemp -d)"
+          ditto -x -k "$archive" "$roundtrip"
+          app="$roundtrip/OvercookedLive.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          for arch in arm64 x86_64; do
+            host="$app/Contents/Resources/HostRuntime/$arch/OvercookedHost"
+            test -x "$host"
+            codesign --verify --strict "$host"
+          done
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
+          shasum -a 256 "$archive"
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "$archive#macOS Universal 完整联机版"

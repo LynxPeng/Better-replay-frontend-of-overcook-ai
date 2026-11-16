@@ -1,0 +1,127 @@
+name: Seal and verify macOS release apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release tag with both macOS ZIPs
+        required: true
+        type: string
+  push:
+    branches: [codex/release-v0.2.1]
+    paths: [".github/workflows/macos-release-apps.yml"]
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || 'v0.2.1' }}
+
+jobs:
+  seal:
+    runs-on: macos-15
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - name: Download draft inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in {1..60}; do
+            count="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+              --jq '[.assets[] | select(.name | contains("-macOS-Universal-"))] | length')"
+            if [[ "$count" == 2 ]]; then
+              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "*-macOS-Universal-$RELEASE_TAG.zip" --dir input
+              exit
+            fi
+            sleep 15
+          done
+          echo "The draft needs both macOS ZIPs."
+          exit 1
+      - name: Seal apps after adding the portable room runtimes
+        run: |
+          mkdir -p signed
+          for product in BetterReplay OvercookedLive; do
+            name="$product-macOS-Universal-$RELEASE_TAG.zip"
+            folder="$(mktemp -d)"
+            ditto -x -k "input/$name" "$folder"
+            if [[ "$product" == "OvercookedLive" ]]; then
+              app="$folder/OvercookedLive.app"
+              /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0" "$app/Contents/Info.plist"
+              /usr/libexec/PlistBuddy -c "Add :NSLocalNetworkUsageDescription string Join cooperative kitchen rooms on the local network." "$app/Contents/Info.plist"
+            else
+              app="$folder/OvercookedReplay.app"
+            fi
+            codesign --force --sign - "$app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            ditto -c -k --sequesterRsrc "$folder" "signed/$name"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sealed-macos-release-apps
+          path: signed/*.zip
+          compression-level: 0
+          if-no-files-found: error
+
+  verify:
+    needs: seal
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sealed-macos-release-apps
+      - name: Verify the exact distribution ZIPs
+        run: |
+          for archive in ./*.zip; do
+            ditto -x -k "$archive" released
+          done
+          codesign --verify --deep --strict --verbose=2 released/OvercookedReplay.app
+          codesign --verify --deep --strict --verbose=2 released/OvercookedLive.app
+          host="released/OvercookedLive.app/Contents/Resources/HostRuntime/${{ matrix.arch }}/OvercookedHost"
+          test -x "$host"
+          test "$(lipo -archs "$host")" = "${{ matrix.arch }}"
+          codesign --verify --strict --verbose=2 "$host"
+      - name: Start a bundled human and AI game from the Unity app
+        run: |
+          python3 - <<'PY'
+          import json
+          import plistlib
+          import subprocess
+          from pathlib import Path
+
+          app = Path("released/OvercookedLive.app/Contents").resolve()
+          executable = plistlib.loads((app / "Info.plist").read_bytes())["CFBundleExecutable"]
+          directory = Path("smoke data").resolve()
+          directory.mkdir()
+          log = directory / "player.log"
+          report = directory / "report.json"
+          arguments = [
+              str(app / "MacOS" / executable), "-batchmode", "-nographics", "-logFile", str(log),
+              "--portable-host", "1", "--portable-data", str(directory),
+              "--live-smoke", "ha", "--live-smoke-steps", "12", "--live-smoke-rate", "6",
+              "--live-smoke-report", str(report),
+          ]
+          try:
+              subprocess.run(arguments, timeout=165, check=True)
+              result = json.loads(report.read_text())
+              assert result["ok"] and result["complete"] and result["tick"] == 12, result
+              record, = (directory / "records").glob("*.ocrep.json")
+              replay = json.loads(record.read_text())
+              assert replay["header"]["model_ids"] == ["", "ppo-final"]
+              print(json.dumps(result, ensure_ascii=False))
+          except BaseException:
+              for path in [log, *directory.glob("rooms/*/server.log")]:
+                  if path.is_file():
+                      print(path.read_text(errors="replace")[-16000:])
+              raise
+          PY

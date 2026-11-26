@@ -40,6 +40,8 @@ public static class NativeDialogChecks {
     }
     public static void Build() {
         PlatformResourceChecks.ReimportCharacters();
+        if(File.Exists(TrueClaudeBootstrap.ModelPath))TrueClaudeBootstrap.Prepare();
+        ReplayCharacterChecks.Slots();
         Abi();ReplayChecks.SerializerRegression();ReplayChecks.Run();
         string location=Path.GetFullPath("../../output/Windows/OvercookedReplay.exe");
         var report=BuildPipeline.BuildPlayer(new[]{"Assets/Scenes/Replay.unity"},location,BuildTarget.StandaloneWindows64,BuildOptions.None);

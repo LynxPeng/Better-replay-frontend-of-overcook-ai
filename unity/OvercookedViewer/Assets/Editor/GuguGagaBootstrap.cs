@@ -67,7 +67,7 @@ public static class GuguGagaBootstrap {
     static void Bake(GuguGagaActor actor) {
         const string folder="Assets/Animations/GuguGaga";Directory.CreateDirectory(folder);AssetDatabase.Refresh();
         var bones=actor.BodyTransforms.ToArray();
-        foreach(FishAction action in Enum.GetValues(typeof(FishAction))) {
+        foreach(FishAction action in BlueFishMotion.PreviewActions) {
             var curves=new Dictionary<Transform,AnimationCurve[]>();
             foreach(var b in bones)curves[b]=Enumerable.Range(0,7).Select(_=>new AnimationCurve()).ToArray();
             float duration=BlueFishMotion.Duration(action);int count=Mathf.CeilToInt(duration*30);

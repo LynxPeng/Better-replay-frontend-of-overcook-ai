@@ -150,6 +150,9 @@ def step_segment(before, after, actions, reward, info):
 
 
 def validate_replay(data):
+    if isinstance(data, dict) and data.get('header', {}).get('schema_version') == 2:
+        from .partition import validate_partition_replay
+        return validate_partition_replay(data)
     def fail(message):
         raise ValueError('Invalid replay: ' + message)
 

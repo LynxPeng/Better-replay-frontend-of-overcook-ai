@@ -9,7 +9,7 @@ public static class BlueFishChecks {
     static void Check(bool condition,string message) {count++;if(!condition)throw new Exception(message);}
     public static void Motion() {
         count=0;
-        foreach(FishAction a in Enum.GetValues(typeof(FishAction))) {
+        foreach(FishAction a in BlueFishMotion.PreviewActions) {
             float d=BlueFishMotion.Duration(a);Check(d>0,"Duration must be positive");
             for(int i=0;i<=60;i++) {
                 var pose=BlueFishMotion.Sample(a,d*i/60);
@@ -39,7 +39,7 @@ public static class BlueFishChecks {
         Debug.Log("Carry anchor local: "+actor.HeldAnchor.localPosition);
         Check(actor.HeldAnchor.localPosition.z>.1f,"Carry prop must be in front of the torso");
         Check(actor.HeldAnchor.localPosition.y<.8f,"Carry arms must not rise above the chest");
-        foreach(FishAction action in Enum.GetValues(typeof(FishAction))) {
+        foreach(FishAction action in BlueFishMotion.PreviewActions) {
             var clip=AssetDatabase.LoadAssetAtPath<AnimationClip>(BlueFishBootstrap.AnimationPath+"/"+action+".anim");
             Check(clip&&AnimationUtility.GetCurveBindings(clip).Length>50,"Baked clip: "+action);
             instance.transform.SetPositionAndRotation(new Vector3(2,0,-3),Quaternion.Euler(0,73,0));

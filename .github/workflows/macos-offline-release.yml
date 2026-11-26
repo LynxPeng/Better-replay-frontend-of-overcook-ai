@@ -1,0 +1,55 @@
+name: Sign and verify the offline macOS replay player
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release containing the Universal replay ZIP
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect, sign and archive the offline player
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          name="BetterReplay-macOS-Universal-$RELEASE_TAG.zip"
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --pattern "$name" --dir input
+          mkdir content signed
+          ditto -x -k "input/$name" content
+          app="content/OvercookedReplay.app"
+          exe="$(plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "${RELEASE_TAG#v}"
+          lipo "$app/Contents/MacOS/$exe" -verify_arch arm64 x86_64
+          test -s content/LICENSES/BlueFatFishBattle-noncommercial-zh.txt
+          test -z "$(find content \( -name 'OvercookedLive*' -o -name 'HostRuntime' \) -print)"
+          codesign --force --deep --sign - "$app"
+          ditto -c -k --sequesterRsrc content "signed/$name"
+          mkdir unpacked
+          ditto -x -k "signed/$name" unpacked
+          app="unpacked/OvercookedReplay.app"
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/MacOS/$exe" -batchmode -nographics -logFile "$RUNNER_TEMP/replay.log" \
+            --check-true-claude "$PWD/unpacked/green-server-seed3.replay.json" \
+            --check-claude-control "$PWD/tests/fixtures/shared-kitchen-excerpt.json" \
+            --check-report "$RUNNER_TEMP/green-checks.json" || { tail -100 "$RUNNER_TEMP/replay.log"; exit 1; }
+          jq -e '.passed and .score == 40 and .greenJointUnloads == 1' "$RUNNER_TEMP/green-checks.json"
+          shasum -a 256 "signed/$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-offline-replay
+          path: signed/*.zip
+          compression-level: 0
+          if-no-files-found: error

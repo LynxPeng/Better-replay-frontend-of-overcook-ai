@@ -9,28 +9,50 @@ namespace OvercookedReplay
     [Serializable] public class ReplayHeader {
         public int schema_version, horizon; public string layout_name, dynamics, source, mdp_params_json;
         public string[] terrain; public bool complete; public PlayerMeta[] players;
+        public string environment, source_version, source_fingerprint; public PartitionConfigData partition_config; public float[] recipe_rewards;
+        public bool IsPartition => environment=="partition_v3" || environment=="partition_v3_legacy";
+        public int shared_chop_steps;
+        public bool IsShared => environment=="shared_kitchen";
     }
     [Serializable] public class Ingredient { public string name; public int[] position; }
     [Serializable] public class Item { public string name; public int[] position; public Ingredient[] _ingredients;
         public float cooking_tick, cook_time; public bool is_idle, is_ready, is_cooking; }
     [Serializable] public class ChefState { public int[] position, orientation; public Item held_object; }
-    [Serializable] public class Order { public string[] ingredients; }
-    [Serializable] public class Snapshot { public int timestep; public ChefState[] players; public Item[] objects; public Order[] all_orders; }
+    [Serializable] public class Order { public string[] ingredients; public int id,recipe,issued,due,side; }
+    [Serializable] public class Snapshot { public int timestep; public ChefState[] players; public Item[] objects; public Order[] all_orders; public PartitionState partition,v3,native_state; public SharedFrame shared; }
     [Serializable] public class Frame { public float time, score; public Snapshot state; }
-    [Serializable] public class ReplayEvent { public string kind; public int agent_index; public int[] position; }
+    [Serializable] public class ReplayEvent { public string kind; public int agent_index; public int[] position,participants; public int order_id,recipe,wait_steps;
+        public bool HasActor(int index) => index>=0 && (agent_index==index || (participants!=null && Array.IndexOf(participants,index)>=0)); }
     [Serializable] public class SyncHandoff {
         public int[] station, participants, attempting_agents;
         public bool success; public string reason; public int sender, receiver;
     }
     [Serializable] public class Segment { public string kind; public int[] actions; public float sparse_reward; public bool reward_known;
-        public ReplayEvent[] events; public SyncHandoff[] sync_handoffs; }
+        public ReplayEvent[] events; public SyncHandoff[] sync_handoffs; public PartitionStepInfo partition_info,native_info; }
     [Serializable] public class ReplayFile {
         public ReplayHeader header; public Frame[] frames; public Segment[] segments; public string[] diagnostics;
-        public static ReplayFile Load(string path) { return Parse(File.ReadAllText(path)); }
+        public static List<float> ScoreMarkerTimes(ReplayFile data) {
+            var times=new List<float>();
+            for(int i=0;i<data.segments.Length;i++){
+                var step=data.segments[i];if(step.kind!="step")continue;
+                bool scoreIncreased=data.frames[i+1].score>data.frames[i].score;
+                bool delivered=step.events!=null&&Array.Exists(step.events,e=>e!=null&&PartitionReplay.IsDelivery(e.kind));
+                if(scoreIncreased||delivered)times.Add(data.frames[i+1].time);
+            }
+            return times;
+        }
+        public static ReplayFile Load(string path) {
+            string json=File.ReadAllText(path);
+            return json.TrimStart().StartsWith("[",StringComparison.Ordinal) ? SharedTrajectory.Load(path) : Parse(json);
+        }
         public static ReplayFile Parse(string json) {
-            return Validate(JsonUtility.FromJson<ReplayFile>(json));
+            if(SharedReplay.IsRawTrace(json))return SharedReplay.Read(json);
+            var data=JsonUtility.FromJson<ReplayFile>(json);
+            PartitionReplay.PrepareLegacy(data);
+            return Validate(data);
         }
         internal static ReplayFile Validate(ReplayFile d) {
+            if(d?.header?.IsPartition==true)return PartitionReplay.Validate(d);
             if(d==null || d.header==null || d.header.schema_version!=1) throw new ArgumentException("不支持的回放文件版本");
             if(d.frames==null || d.frames.Length==0 || d.segments==null || d.frames.Length!=d.segments.Length+1)
                 throw new ArgumentException("回放状态与步骤数量不一致");

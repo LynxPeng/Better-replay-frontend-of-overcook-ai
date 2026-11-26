@@ -6,7 +6,7 @@
 
 <p>
   <a href="https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.2.0-live-windows-preview"><img src="https://img.shields.io/badge/Windows_Live-v0.2.0_preview-205A48" alt="Windows 联机预览 v0.2.0"></a>
-  <a href="https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.1.3-macos-preview"><img src="https://img.shields.io/badge/macOS_Replay-v0.1.3_preview-205A48" alt="macOS 回放预览 v0.1.3"></a>
+  <a href="https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/tag/v0.3.0"><img src="https://img.shields.io/badge/macOS_Replay-v0.3.0-205A48" alt="macOS 回放 v0.3.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Source-MIT-6B5133" alt="源码采用 MIT 许可证"></a>
 </p>
 
@@ -21,17 +21,18 @@
 | 用途 | 下载与启动 |
 | --- | --- |
 | **联机**<br>Windows | [x64 预览 v0.2.0][live-zip] · 约 356 MiB<br>打开 `OvercookedLive.exe` |
-| **回放**<br>Windows | [x64 离线版 v0.1.0][win-zip] · 约 79 MiB<br>打开 `OvercookedReplay.exe` |
-| **回放**<br>macOS | [Universal 预览 v0.1.3][mac-zip] · 约 98 MiB<br>打开 `OvercookedReplay.app` |
+| **回放**<br>Windows | [x64 离线版 v0.3.0][win-zip]<br>打开 `OvercookedReplay.exe` |
+| **回放**<br>macOS | [Universal 离线版 v0.3.0][mac-zip]<br>打开 `OvercookedReplay.app` |
 
 完整解压后从解压目录打开程序，保留同目录的配套文件。发行包已附运行库、美术和示例，联机包还附房主服务与 CPU 模型。各版本的校验文件与验收范围见 [Releases][releases]。
 
 **第一次看回放**，展开左侧的厨房列表，选择 `upstream-sp-220`，再点「播放」。这是内置的上游自博弈对局，共 400 步、401 个状态帧，最终得分 220。观看自己的对局时，点「打开本地回放」，选择 `.ocrep.json`。
 
 - **回放定位**可用空格播放或暂停、左右方向键逐步、时间轴跳转，以及 0.25× 至 4× 倍速。当前源码分支的金色刻度标记实际交付，便于对比前后状态与比分。
+- **hy 三人共享厨房**支持直接打开训练导出的逐帧 JSON，查看两人同步出锅、三槽装盘台、普通单与联合单。Windows 发行包也支持上游演示的动作轨迹与配套摘要。构建时在项目 Conda 环境安装 `.[windows-build]`，将 `hucooked` 与本仓库放在同级目录，并在环境仓库执行 `git fetch origin hy`。运行 `scripts/build-windows.ps1` 会一并打包环境读取工具。
 - **画面与镜头**可切换昼夜。解锁镜头后，滚轮缩放，Shift 加滚轮升降，WASD 或中键平移，右键拖动调整俯仰。[画面设置预览](#画面设置)
 - **Windows 离线包**适用于 Windows 10/11 x64 与 Direct3D 11/12。[Windows 回放使用说明](WINDOWS-QUICKSTART.md)
-- **macOS 预览**包含 Apple Silicon 和 Intel 双架构，并内置中文字体。v0.1.3 的实际 Metal 画面仍待 Mac 实机验收。[macOS 使用说明](MACOS-QUICKSTART.md)
+- **macOS 离线包**包含 Apple Silicon 和 Intel 双架构，并内置中文字体。[macOS 使用说明](MACOS-QUICKSTART.md)
 
 ## 实时联机
 
@@ -85,6 +86,8 @@ python -m venv .venv
 示例用随机动作生成一场 400 步记录。在回放器中打开 `output/my-game.ocrep.json` 即可检查结果。[完整记录示例](examples/record_episode.py)
 
 ### 接入你自己的智能体
+
+**HuCooked v3：**新版源码支持 `PartitionKitchen` 的同步口和共享台面。已有实验生成的 `.ocrep.json`（含 `state.v3`）可直接打开，食材、加工进度和限时订单使用真实 v3 状态展示；新增脚本可选用 `PartitionReplayRecorder`，也支持转换历史 seed/actions 轨迹。[v3 使用说明](docs/V3_REPLAY.md)
 
 在初态创建 `ReplayRecorder`，让所有智能体基于**同一个状态**选择动作，动作顺序与 `env.state.players` 一致。每次联合动作只调用一次 `env.step()`，随后把动作、新状态、奖励和 `info` 写入记录器。保存最后一帧后再重置环境。完整对局包含 **T 步和 T+1 帧**，提前结束时用 `complete=False`。展示时间由 `tick_rate` 决定，团队得分使用稀疏奖励，塑形奖励单独保存。
 
@@ -152,6 +155,8 @@ if ($LASTEXITCODE -eq 0) { git -C $upstream apply $patch }
 
 重建需要 **Unity 6000.6.9f1、URP 17.6** 及本地美术资源。按 [资源说明](unity/ASSET_SOURCES.md) 导入 Restaurant Bits for Unity、Cartoon Town 和 Synty Simple Sky，保留资产的 `.meta` GUID。联机构建还需要本地角色预制体。准备好资源后，从本仓库根目录运行 Windows 构建。
 
+重建含真·Claude娘的三人回放器时，先运行 `python scripts/import-true-claude.py` 下载并校验绿方的角色模型。Unity 构建时会生成带骨骼、贴图和持物点的预制体。[模型来源与署名](THIRD_PARTY_NOTICES.md)
+
 ```powershell
 .\scripts\build-windows.ps1
 ```
@@ -165,10 +170,10 @@ if ($LASTEXITCODE -eq 0) { git -C $upstream apply $patch }
 
 ## 许可证与署名
 
-这是面向 Overcooked-AI 的社区项目。源码采用 [MIT](LICENSE)，保留 Center for Human-Compatible AI 版权声明。角色、商店美术、字体和 Unity 运行库适用各自的许可。发行包内附 `CharacterCredits.txt`、第三方声明及许可证目录。[第三方声明](THIRD_PARTY_NOTICES.md) · [许可证文件](LICENSES)
+这是面向 Overcooked-AI 的社区项目。源码采用 [MIT](LICENSE)，保留 Center for Human-Compatible AI 版权声明。角色、商店美术、字体和 Unity 运行库适用各自的许可。绿方真·Claude娘基于 a2244921700-code 的《蓝色肥鱼大作战》原版模型改编，角色授权限非商业用途。发行包内附 `CharacterCredits.txt`、第三方声明及许可证目录。[第三方声明](THIRD_PARTY_NOTICES.md) · [许可证文件](LICENSES)
 
 [live-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.2.0-live-windows-preview/OvercookedLive-Windows-x64-v0.2.0-live-windows-preview.zip
-[win-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.1.0/BetterReplay-Windows-x64-v0.1.0.zip
-[mac-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.1.3-macos-preview/BetterReplay-macOS-Universal-v0.1.3-macos-preview.zip
+[win-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.3.0/BetterReplay-Windows-x64-v0.3.0.zip
+[mac-zip]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases/download/v0.3.0/BetterReplay-macOS-Universal-v0.3.0.zip
 [releases]: https://github.com/LynxPeng/Better-replay-frontend-of-overcook-ai/releases
 [upstream]: https://github.com/HumanCompatibleAI/overcooked_ai

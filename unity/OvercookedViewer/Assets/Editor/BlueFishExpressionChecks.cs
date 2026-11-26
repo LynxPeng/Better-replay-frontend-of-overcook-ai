@@ -14,7 +14,7 @@ public static class BlueFishExpressionChecks {
     static int shot=-1,readyFrame;
     static BlueFishExpressionChecks() {if(SessionState.GetBool(Key,false))EditorApplication.update+=Poll;}
     public static void DefaultMood() {
-        foreach(FishAction action in Enum.GetValues(typeof(FishAction)))for(int i=0;i<=10;i++) {
+        foreach(FishAction action in BlueFishMotion.PreviewActions)for(int i=0;i<=10;i++) {
             var pose=BlueFishMotion.Sample(action,BlueFishMotion.Duration(action)*i/10);
             bool happy=action==FishAction.Deliver&&i<10;
             if(pose.Smile!=(happy?1:0)||pose.Oh!=(happy?0:1))throw new Exception("Expected default oh, full Happy only during delivery: "+action+" at "+i);

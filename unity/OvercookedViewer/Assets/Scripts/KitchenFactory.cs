@@ -117,6 +117,8 @@ public static class KitchenFactory {
         return root;
     }
     public static GameObject Item(string name,Transform parent,Vector3 pos,float size=.3f) {
+        if(name=="egg"||name=="beef"||name.StartsWith("cut_",System.StringComparison.Ordinal)||name.StartsWith("meal_",System.StringComparison.Ordinal))
+            return PartitionKitchenView.Item(name,parent,pos,size);
         var color=name=="tomato"?"#ef654b":name=="onion"?"#e9c471":name=="dish"?"#f4f2df":"#e7a653";
         var root=new GameObject(name);root.transform.SetParent(parent,false);root.transform.localPosition=pos;
         string model=name=="dish"?"plate":name=="soup"?"bowl_small":"food_ingredient_"+name;

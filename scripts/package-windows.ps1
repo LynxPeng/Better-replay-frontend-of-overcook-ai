@@ -2,16 +2,21 @@ param([Parameter(Mandatory=$true)][string]$PlayerDirectory,[string]$Version='v0.
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path $PSScriptRoot -Parent
 $playerRoot=(Resolve-Path -LiteralPath $PlayerDirectory).Path
-foreach($required in @('OvercookedReplay.exe','UnityPlayer.dll','OvercookedReplay_Data','MonoBleedingEdge')){if(-not(Test-Path -LiteralPath (Join-Path $playerRoot $required))){throw "Incomplete player: $required"}}
+foreach($required in @('OvercookedReplay.exe','UnityPlayer.dll','OvercookedReplay_Data','MonoBleedingEdge','SharedTrajectory\SharedTrajectory.exe')){if(-not(Test-Path -LiteralPath (Join-Path $playerRoot $required))){throw "Incomplete player: $required"}}
 $outputRoot=Join-Path $repoRoot 'release'
 $bundleRoot=Join-Path $outputRoot ('BetterReplay-Windows-x64-'+$Version)
 if(Test-Path -LiteralPath $bundleRoot){throw "Refusing to overwrite existing bundle: $bundleRoot"}
 New-Item -ItemType Directory -Force -Path $bundleRoot | Out-Null
-foreach($entry in @('OvercookedReplay.exe','UnityPlayer.dll','UnityCrashHandler64.exe','dstorage.dll','dstoragecore.dll','OvercookedReplay_Data','MonoBleedingEdge','D3D12')){
+foreach($entry in @('OvercookedReplay.exe','UnityPlayer.dll','UnityCrashHandler64.exe','dstorage.dll','dstoragecore.dll','OvercookedReplay_Data','MonoBleedingEdge','D3D12','SharedTrajectory')){
     $sourcePath=Join-Path $playerRoot $entry
     if(Test-Path -LiteralPath $sourcePath){Copy-Item -LiteralPath $sourcePath -Destination $bundleRoot -Recurse}
 }
 foreach($entry in @('LICENSE','LICENSES','THIRD_PARTY_NOTICES.md','README.md')){Copy-Item -LiteralPath (Join-Path $repoRoot $entry) -Destination $bundleRoot -Recurse}
+Copy-Item -LiteralPath (Join-Path $repoRoot 'examples/replays/green-server-seed3.replay.json') -Destination $bundleRoot
+foreach($extra in @('runtime-checks.json')){
+    if(Test-Path -LiteralPath (Join-Path $playerRoot $extra)){Copy-Item -LiteralPath (Join-Path $playerRoot $extra) -Destination $bundleRoot}
+}
+if(Test-Path -LiteralPath (Join-Path $repoRoot 'docs\V3_REPLAY.md')){Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\V3_REPLAY.md') -Destination $bundleRoot}
 Copy-Item -LiteralPath (Join-Path $repoRoot 'WINDOWS-QUICKSTART.md') -Destination (Join-Path $bundleRoot 'README.md')
 Copy-Item -LiteralPath (Join-Path $repoRoot 'unity\OvercookedViewer\Assets\StreamingAssets\CharacterCredits.txt') -Destination $bundleRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot 'unity\OvercookedViewer\Assets\StreamingAssets\CharacterCredits.txt') -Destination (Join-Path $bundleRoot 'OvercookedReplay_Data\StreamingAssets\CharacterCredits.txt')

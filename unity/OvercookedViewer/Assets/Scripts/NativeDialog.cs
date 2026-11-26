@@ -58,7 +58,7 @@ public static class NativeDialog {
         IntPtr file=IntPtr.Zero,filter=IntPtr.Zero,title=IntPtr.Zero;
         try {
             file=Marshal.AllocHGlobal(capacity*2);Marshal.WriteInt16(file,0);
-            filter=Marshal.StringToHGlobalUni("回放文件\0*.ocrep.json\0JSON\0*.json\0\0");
+            filter=Marshal.StringToHGlobalUni("厨房回放 (*.json)\0*.json\0Overcooked 回放 (*.ocrep.json)\0*.ocrep.json\0\0");
             title=Marshal.StringToHGlobalUni("选择 Overcooked 回放");
             var request=new OpenFileName {
                 size=(uint)Marshal.SizeOf(typeof(OpenFileName)),owner=GetActiveWindow(),

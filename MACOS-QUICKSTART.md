@@ -1,8 +1,10 @@
-# Better replay frontend of overcook-ai — macOS 预览版
+# Better replay frontend of overcook-ai — macOS 离线回放器
 
 这是 macOS Universal / Mono 便携应用，包含 Apple Silicon（M1 及后续）和 Intel x86_64 两种架构。完整解压 ZIP 后，将 `OvercookedReplay.app` 放到“应用程序”或其他可写目录，双击打开。播放不需要 Python、Unity Editor 或网络。请保留随包附带的许可证和署名。
 
-**构建状态：在 Windows 上交叉编译；尚未在真实 Mac 上进行运行和画面验收。应用未经 Developer ID 签名和 Apple 公证。** macOS 可能要求在“系统设置 → 隐私与安全性”中确认打开。仅在确认下载来源后允许该应用；不要关闭系统整体安全防护。此预览包不承诺通过 Gatekeeper 自动放行。
+此版采用 ad-hoc 签名，未经 Apple 公证。macOS 如要求确认来源，可在“系统设置 → 隐私与安全性”中允许打开。
+
+“打开本地回放”支持 hy 共享厨房的逐帧原始 JSON。打开 ZIP 内的 green-server-seed3.replay.json，可在第 13 步看绿方真·Claude娘装盘，第 24 步看橙绿同步出锅。仅含动作的上游演示（trajectory 与 summary 文件对）由 Windows 包配套的读取器支持。
 
 如果 Finder 提示无法执行，可在终端给应用主程序补回权限（将路径替换为实际位置）：
 
@@ -14,7 +16,6 @@ chmod +x "/Applications/OvercookedReplay.app/Contents/MacOS/Overcooked Replay"
 
 此版本包含更新后的餐厅界面、真实食材订单图标、交付时间轴刻度、昼夜配色、暖色灯串和白色烹饪蒸汽。默认每秒展示六个逻辑步骤，400 步样例约为 1 分 7 秒，可用播放倍速调整。
 
-0.1.3 随应用内置 Noto Sans CJK 中文字体。菜谱图标预先渲染为图片并打包，台面交互高亮使用独立的透明 Shader，避免依赖通用 URP Unlit 的运行时变体。此修复版仍需 Apple Silicon 实机确认文字、图标和高亮的实际显示。
 
 - 空格：播放/暂停；左右方向键：逐步。
 - 解锁镜头后，滚轮缩放、Shift+滚轮升降、WASD/中键平移、右键上下拖动调整俯仰。

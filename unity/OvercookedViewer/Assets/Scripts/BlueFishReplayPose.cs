@@ -8,13 +8,13 @@ public static class BlueFishReplayPose {
             if(age+.0001f>=BlueFishMotion.CelebrationDuration)break;
             var step=data.segments[k];if(step.kind=="gap")break;
             if(step.actions==null||step.actions[agent]!=5||step.events==null)continue;
-            foreach(var e in step.events)if(e.kind=="soup_delivery"&&e.agent_index==agent) {
+            foreach(var e in step.events)if(PartitionReplay.IsDelivery(e.kind)&&e.agent_index==agent) {
                 return age/BlueFishMotion.CelebrationDuration;
             }
         }
         return -1;
     }
-    public static FishAction Select(ReplayFile data,int index,int agent) {
+    public static FishAction Select(ReplayFile data,int index,int agent,bool detailedKitchenActions=false) {
         var before=data.frames[index].state.players[agent];
         bool holding=!string.IsNullOrEmpty(before.held_object?.name);
         FishAction baseline=holding?FishAction.Carry:FishAction.Idle;
@@ -25,7 +25,7 @@ public static class BlueFishReplayPose {
         if(step.actions[agent]==5) {
             bool cooking=false,delivery=false,success=false;
             if(step.events!=null)foreach(var e in step.events) {
-                bool matches=e.agent_index==agent;
+                bool matches=e.HasActor(agent);
                 // Automatic pot events have no player id. Match the interacted tile explicitly.
                 if(e.agent_index<0&&e.kind=="start_cooking"&&e.position!=null&&e.position.Length>=2)
                 {
@@ -34,8 +34,13 @@ public static class BlueFishReplayPose {
                         if(other!=agent&&step.actions[other]==5&&Faces(data.frames[index].state.players[other],e.position))matches=false;
                 }
                 if(!matches||e.kind.StartsWith("sync_handoff_",System.StringComparison.Ordinal))continue;
+                if(data.header.IsPartition&&!PartitionReplay.IsSuccessfulAction(e.kind))continue;
+                if(detailedKitchenActions && data.header.IsShared) {
+                    if(e.kind=="assemble")return FishAction.Assemble;
+                    if(e.kind=="joint_unload")return FishAction.JointUnload;
+                }
                 success=true;
-                cooking|=e.kind=="start_cooking";delivery|=e.kind=="soup_delivery";
+                cooking|=e.kind=="start_cooking"||e.kind=="chop"||e.kind=="tend";delivery|=PartitionReplay.IsDelivery(e.kind);
             }
             string previous=before.held_object?.name,next=after.held_object?.name;
             if(string.IsNullOrEmpty(previous))previous=null;if(string.IsNullOrEmpty(next))next=null;

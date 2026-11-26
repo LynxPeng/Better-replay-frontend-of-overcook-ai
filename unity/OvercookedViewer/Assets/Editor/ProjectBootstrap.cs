@@ -78,7 +78,9 @@ public static class ProjectBootstrap {
     }
     [MenuItem("Tools/Overcooked/Build Windows Player")]
     public static void Build() {
-        Setup();string location=Path.GetFullPath("../../output/Windows/OvercookedReplay.exe");Directory.CreateDirectory(Path.GetDirectoryName(location));
+        Setup();
+        if(File.Exists(TrueClaudeBootstrap.ModelPath))TrueClaudeBootstrap.Prepare();
+        string location=Path.GetFullPath("../../output/Windows/OvercookedReplay.exe");Directory.CreateDirectory(Path.GetDirectoryName(location));
         var report=BuildPipeline.BuildPlayer(new[]{"Assets/Scenes/Replay.unity"},location,BuildTarget.StandaloneWindows64,BuildOptions.None);
         if(report.summary.result!=UnityEditor.Build.Reporting.BuildResult.Succeeded)throw new Exception("Windows build failed: "+report.summary.result);
         Debug.Log("Windows player built: "+location);

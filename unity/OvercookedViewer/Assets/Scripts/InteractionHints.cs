@@ -19,6 +19,12 @@ public sealed class InteractionHints : MonoBehaviour {
         if(state?.players==null||agent<0||agent>=state.players.Length||header?.terrain==null)return false;
         var p=state.players[agent];target=new Vector2Int(p.position[0]+p.orientation[0],p.position[1]+p.orientation[1]);
         if(target.y<0||target.y>=header.terrain.Length||target.x<0||target.x>=header.terrain[target.y].Length)return false;
+        if(header.IsShared) {
+            char station=header.terrain[target.y][target.x];
+            if(station=='G'||station=='A')return p.position[1]==target.y;
+            return "MLKBDS".IndexOf(station)>=0;
+        }
+        if(header.IsPartition)return "TPEBCKSX".IndexOf(header.terrain[target.y][target.x])>=0;
         Item item=null;if(state.objects!=null)foreach(var o in state.objects)if(o.position[0]==target.x&&o.position[1]==target.y){item=o;break;}
         string held=p.held_object?.name;bool empty=string.IsNullOrEmpty(held);
         switch(header.terrain[target.y][target.x]){

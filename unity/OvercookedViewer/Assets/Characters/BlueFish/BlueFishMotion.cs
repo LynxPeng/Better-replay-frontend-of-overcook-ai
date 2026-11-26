@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace OvercookedReplay {
-public enum FishAction { Idle, Walk, Carry, Pickup, Place, Deliver, Cook, Turn }
+public enum FishAction { Idle, Walk, Carry, Pickup, Place, Deliver, Cook, Turn, Assemble, JointUnload }
 
 // All poses use a normalized, forward-facing T-pose. No accumulated time or root motion.
 public sealed class FishPose {
@@ -14,6 +14,10 @@ public sealed class FishPose {
 }
 
 public static class BlueFishMotion {
+    // These eight clips are authored for both original character previews.
+    public static readonly IReadOnlyList<FishAction> PreviewActions=Array.AsReadOnly(new[]{
+        FishAction.Idle,FishAction.Walk,FishAction.Carry,FishAction.Pickup,
+        FishAction.Place,FishAction.Deliver,FishAction.Cook,FishAction.Turn});
     public const float CelebrationDuration=.45f;
     public static float Duration(FishAction action) {
         switch(action) {

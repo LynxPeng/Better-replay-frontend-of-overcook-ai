@@ -108,11 +108,16 @@ def _episode(states, actions, rewards, params, metadata, times=None, scores=None
     return validate_replay(dict(header=header, frames=frames, segments=segments, diagnostics=diagnostics))
 
 
-def convert_data(data, dynamics=None, source_name='imported'):
+def convert_data(data, dynamics=None, source_name='imported', *, partition_config=None):
     if dynamics not in (None, 'old', 'new'):
         raise ValueError('dynamics must be old or new')
     if isinstance(data, dict) and 'header' in data:
         return [validate_replay(copy.deepcopy(data))]
+    if isinstance(data, dict) and data.get('layout') in ('sync', 'counter') and 'actions' in data:
+        from .partition import convert_partition_trace
+        return [convert_partition_trace(data, source_name=source_name, config=partition_config)]
+    if partition_config is not None:
+        raise ValueError('partition_config requires a v3 seed/actions trace')
     if isinstance(data, dict) and 'ep_states' in data:
         results = []
         episode_infos = data.get('ep_infos')
@@ -163,7 +168,7 @@ def convert_data(data, dynamics=None, source_name='imported'):
     return results
 
 
-def convert_file(input_path, output_dir, dynamics=None):
+def convert_file(input_path, output_dir, dynamics=None, *, partition_config=None):
     path, destination = Path(input_path), Path(output_dir)
     if path.suffix.lower() in ('.pickle', '.pkl'):
         # Pickles are legacy local inputs; Unity never deserializes executable Python formats.
@@ -175,4 +180,4 @@ def convert_file(input_path, output_dir, dynamics=None):
     else:
         data = json.loads(path.read_text(encoding='utf-8-sig'))
     return [write_replay(item, destination / f'{path.stem}-{i:03d}.ocrep.json')
-            for i, item in enumerate(convert_data(data, dynamics, path.name))]
+            for i, item in enumerate(convert_data(data, dynamics, path.name, partition_config=partition_config))]

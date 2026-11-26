@@ -1,0 +1,12 @@
+{
+  "layout": ["XXXXMXX", "X     L", "X  G  K", "S  A  X", "X  B  X", "D     X", "XXXXXXX"],
+  "width": 7,
+  "height": 7,
+  "horizon": 300,
+  "mode": "regression",
+  "frames": [
+    {"tick":21,"actions":["N","STAY","INT"],"reward":0.0,"score":0.0,"normal_completed":1,"joint_completed":0,"joint_wait_steps":2,"unmatched_steps":0,"chefs":[{"id":0,"x":1,"y":2,"facing":"N","held":""},{"id":1,"x":4,"y":2,"facing":"W","held":""},{"id":2,"x":5,"y":2,"facing":"E","held":""}],"cooker":{"item":"CM","rem":0,"kind":"joint"},"cutting":{"item":"RS","prog":1},"asm":{"main":"","side":"","plate":""},"buf":"","orders":[{"slot":1,"id":1,"kind":"joint","status":"started"},{"slot":2,"id":2,"kind":"normal","status":"active"}]},
+    {"tick":22,"actions":["E","INT","INT"],"reward":0.375,"score":0.0,"normal_completed":1,"joint_completed":0,"joint_wait_steps":3,"unmatched_steps":1,"chefs":[{"id":0,"x":2,"y":2,"facing":"E","held":""},{"id":1,"x":4,"y":2,"facing":"W","held":""},{"id":2,"x":5,"y":2,"facing":"E","held":""}],"cooker":{"item":"CM","rem":0,"kind":"joint"},"cutting":{"item":"CS","prog":2},"asm":{"main":"","side":"","plate":""},"buf":"","orders":[{"slot":1,"id":1,"kind":"joint","status":"started"},{"slot":2,"id":2,"kind":"normal","status":"active"}]},
+    {"tick":23,"actions":["INT","INT","INT"],"reward":0.0,"score":0.0,"normal_completed":1,"joint_completed":0,"joint_wait_steps":4,"unmatched_steps":1,"chefs":[{"id":0,"x":2,"y":2,"facing":"E","held":""},{"id":1,"x":4,"y":2,"facing":"W","held":""},{"id":2,"x":5,"y":2,"facing":"E","held":"CS"}],"cooker":{"item":"","rem":0,"kind":""},"cutting":{"item":"","prog":0},"asm":{"main":"CM","side":"","plate":""},"buf":"","orders":[{"slot":1,"id":1,"kind":"joint","status":"started"},{"slot":2,"id":2,"kind":"normal","status":"active"}]}
+  ]
+}

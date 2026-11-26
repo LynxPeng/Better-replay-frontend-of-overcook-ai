@@ -21,8 +21,10 @@ public partial class ReplayPlayer : MonoBehaviour {
     float captureAfter;
     public bool UseBlueFish=true;
     public bool UseGuguGaga=true;
+    public bool UseTrueClaude=true;
     AudioSource sound; AudioClip delivery;
     InteractionHints interactionHints;
+    SharedKitchenView sharedKitchen;
     LiveClient live;
     internal bool ModalOpen => settings.Open;
     internal bool IsLive => live && !live.Reviewing;
@@ -31,7 +33,7 @@ public partial class ReplayPlayer : MonoBehaviour {
     public static string CharacterResource(int agent,bool enabled) {
         if(agent<0||agent>=ChefColors.Length)throw new ArgumentOutOfRangeException(nameof(agent));
         if(!enabled)return null;
-        return agent switch {0=>"LocalCharacters/BlueFatFish",1=>"LocalCharacters/GuguGaga",_=>null};
+        return agent switch {0=>"LocalCharacters/BlueFatFish",1=>"LocalCharacters/GuguGaga",2=>"LocalCharacters/TrueClaude",_=>null};
     }
     void Start() {
         live=GetComponent<LiveClient>();
@@ -46,9 +48,12 @@ public partial class ReplayPlayer : MonoBehaviour {
         }delivery.SetData(wave,0);
         samples=Directory.GetFiles(Application.streamingAssetsPath+"/Samples","*.ocrep.json");Array.Sort(samples);
         var args=Environment.GetCommandLineArgs();string file=samples.Length>0?samples[0]:null;
+        float captureAlpha=0;
         for(int i=0;i<args.Length-1;i++) {
             if(args[i]=="--replay")file=args[i+1]; if(args[i]=="--capture")capture=args[i+1];
             if(args[i]=="--frame")int.TryParse(args[i+1],out captureFrame);
+            if(args[i]=="--frame-alpha")float.TryParse(args[i+1],System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,out captureAlpha);
             if(args[i]=="--view")view=args[i+1]=="iso"?KitchenView.Isometric:KitchenView.LongEdge;
         }
         captureQuit=Array.IndexOf(args,"--quit-after-capture")>=0;
@@ -60,8 +65,17 @@ public partial class ReplayPlayer : MonoBehaviour {
         if(Array.IndexOf(args,"--night")>=0)preferences.night=true;
         if(Array.IndexOf(args,"--day")>=0)preferences.night=false;
         SetNight(preferences.night,false);
+        int check=Array.IndexOf(args,"--check-replays");
+        if(check>=0&&check+1<args.Length){int report=Array.IndexOf(args,"--check-report");
+            StartCoroutine(PartitionRuntimeChecks.Run(this,args[check+1],report>=0&&report+1<args.Length?args[report+1]:"replay-checks.json"));return;}
+        int characterCheck=Array.IndexOf(args,"--check-true-claude");
+        if(characterCheck>=0&&characterCheck+1<args.Length) {
+            int report=Array.IndexOf(args,"--check-report");
+            StartCoroutine(TrueClaudePlaybackChecks.Run(this,args[characterCheck+1],
+                report>=0&&report+1<args.Length?args[report+1]:"true-claude-checks.json"));return;
+        }
         if(file!=null&&!IsLive)Load(file);
-        if(captureFrame>=0 && Clock!=null)Seek(captureFrame);
+        if(captureFrame>=0 && Clock!=null)SeekSample(captureFrame,captureAlpha);
         if(Array.IndexOf(args,"--show-settings")>=0)settings.Show(preferences);
     }
     public void Load(string path) {
@@ -74,6 +88,7 @@ public partial class ReplayPlayer : MonoBehaviour {
             Presentation=new ReplayPresentationClock(Clock,0);
             if(world)Destroy(world.gameObject);
             world=new GameObject("Kitchen").transform;
+            sharedKitchen=next.header.IsShared?new SharedKitchenView(next):null;
             interactionHints=world.gameObject.AddComponent<InteractionHints>();
             objects=new GameObject("Objects").transform;objects.SetParent(world,false);
             stoves.Clear();
@@ -86,8 +101,15 @@ public partial class ReplayPlayer : MonoBehaviour {
             RestaurantBackdrop.Build(world,w,h);
             for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
                 var p=new Vector3(x,0,-y);char tile=Data.header.terrain[y][x];
-                if(tile!=' ') {var prefab=Resources.Load<GameObject>("Prefabs/Station_"+tile);
-                    var g=prefab?Instantiate(prefab):KitchenFactory.Station(tile);g.transform.SetParent(world,false);g.transform.localPosition=p;
+                if(tile!=' ') {
+                    GameObject g;
+                    if(sharedKitchen!=null)g=sharedKitchen.Station(tile,x,y);
+                    else if(Data.header.IsPartition)g=PartitionKitchenView.Station(tile);
+                    else {
+                        var prefab=Resources.Load<GameObject>("Prefabs/Station_"+tile);
+                        g=prefab?Instantiate(prefab):KitchenFactory.Station(tile);
+                    }
+                    g.transform.SetParent(world,false);g.transform.localPosition=p;
                     var cabinet=g.transform.Find("kitchencounter_straight_B");
                     if(cabinet)foreach(var direction in new[]{new Vector2Int(0,1),new Vector2Int(1,0),new Vector2Int(0,-1),new Vector2Int(-1,0)}) {
                         int nx=x+direction.x,ny=y+direction.y;
@@ -100,12 +122,13 @@ public partial class ReplayPlayer : MonoBehaviour {
                     if(tile=='H') {
                         bool northSouth=y>0 && y+1<h && Data.header.terrain[y-1][x]==' ' && Data.header.terrain[y+1][x]==' ';
                         handoffStations[cell]=KitchenFactory.HandoffMarker(g.transform,northSouth);
-                    } else interactionHints.Register(cell,g);
-                    if(tile=='P')stoves.Add(cell,new PotSimmer(g.transform,x,y));
+                    } else if(tile!='#' && !(sharedKitchen!=null && tile=='X'))interactionHints.Register(cell,g);
+                    if(tile==(Data.header.IsPartition?'K':'P'))stoves.Add(cell,new PotSimmer(g.transform,x,y));
                 }
             }
             for(int i=0;i<playerCount;i++) {
-                string resource=CharacterResource(i,i==0?UseBlueFish:UseGuguGaga);
+                bool enabled=i switch {0=>UseBlueFish,1=>UseGuguGaga,_=>UseTrueClaude};
+                string resource=CharacterResource(i,enabled);
                 var prefab=resource!=null?Resources.Load<GameObject>(resource):null;
                 if(!prefab)prefab=Resources.Load<GameObject>("Prefabs/Chef"+i);
                 var g=prefab?Instantiate(prefab):KitchenFactory.Chef(ChefColors[i]);
@@ -132,7 +155,7 @@ public partial class ReplayPlayer : MonoBehaviour {
         Presentation=new ReplayPresentationClock(Clock,BlueFishMotion.CelebrationDuration);
         Clock.Playing=true;applied=-1;Apply();
         if(sound && segment.events!=null)foreach(var e in segment.events)
-            if(e.kind=="soup_delivery")sound.PlayOneShot(delivery);
+            if(PartitionReplay.IsDelivery(e.kind))sound.PlayOneShot(delivery);
     }
     internal void SettleLiveFrame() {
         if(Clock==null)return;
@@ -145,7 +168,8 @@ public partial class ReplayPlayer : MonoBehaviour {
         screenWidth=Screen.width;screenHeight=Screen.height;
     }
     void ApplyCamera(Camera camera) {
-        var focus=KitchenCamera.Apply(camera,Data.header.terrain[0].Length,Data.header.terrain.Length,view,.9f,yaw,preferences.cameraPitch);
+        bool shared=sharedKitchen!=null;
+        var focus=KitchenCamera.Apply(camera,Data.header.terrain[0].Length,Data.header.terrain.Length,view,shared?1.16f:.9f,yaw,preferences.cameraPitch,shared);
         navigation.Apply(camera,focus);if(sky)sky.UpdatePose();
     }
     void ResetCamera() {navigation.Reset();yaw=0;CancelCameraDrag();FrameCamera();}
@@ -173,12 +197,22 @@ public partial class ReplayPlayer : MonoBehaviour {
         if(save)preferences.Save(ViewerPreferences.DefaultPath);
     }
     public void Seek(int index) {if(Clock==null)return;if(sound)sound.Stop();bool resume=Presentation.Playing;Clock.SeekFrame(index);Presentation.ResetAfterSeek(resume);applied=-1;Apply();}
+    internal void SeekSample(int index,float alpha) {
+        index=Mathf.Clamp(index,0,Data.frames.Length-1);
+        if(sound)sound.Stop();
+        if(alpha>0 && index<Data.segments.Length && Data.segments[index].kind=="step" &&
+           Data.frames[index+1].time>Data.frames[index].time)
+            Clock.Seek(Mathf.Lerp(Data.frames[index].time,Data.frames[index+1].time,Mathf.Clamp01(alpha)));
+        else
+            Clock.SeekFrame(index);
+        Presentation.ResetAfterSeek(false);applied=-1;Apply();
+    }
     void Update() {
         if(Clock==null){if(captureUi)CaptureRequestedFrame();return;}
         int old=Clock.Index;Presentation.Advance(UnityEngine.Time.unscaledDeltaTime);Apply();
         if(screenWidth!=Screen.width||screenHeight!=Screen.height)FrameCamera();
         if(!IsLive && Clock.Index>old && sound)for(int k=old;k<Clock.Index;k++) {
-            var events=Data.segments[k].events;if(events!=null)foreach(var e in events)if(e.kind=="soup_delivery")sound.PlayOneShot(delivery);
+            var events=Data.segments[k].events;if(events!=null)foreach(var e in events)if(PartitionReplay.IsDelivery(e.kind))sound.PlayOneShot(delivery);
         }
         if(!IsLive && !settings.Open) {
             if(Input.GetKeyDown(KeyCode.Space))Presentation.Toggle();
@@ -198,16 +232,23 @@ public partial class ReplayPlayer : MonoBehaviour {
             int width=preferences.width,height=preferences.height;var camera=Camera.main;var oldRect=camera.rect;
             camera.rect=new Rect(0,0,1,1);camera.aspect=(float)width/height;
             ApplyCamera(camera);
-            var target=new RenderTexture(width,height,24);target.antiAliasing=preferences.msaa;
-            var request=new RenderPipeline.StandardRequest {destination=target};
-            RenderPipeline.SubmitRenderRequest(Camera.main,request);
-            var previous=RenderTexture.active;RenderTexture.active=target;
-            var image=new Texture2D(width,height,TextureFormat.RGB24,false);
-            image.ReadPixels(new Rect(0,0,width,height),0,0);image.Apply();
-            File.WriteAllBytes(capture,image.EncodeToPNG());RenderTexture.active=previous;
-            target.Release();Destroy(target);Destroy(image);capture=null;
+            SaveCameraFrame(camera,capture,width,height,preferences.msaa);
+            capture=null;
             camera.rect=oldRect;camera.ResetAspect();FrameCamera();
         } else if(captureQuit && capture==null && UnityEngine.Time.frameCount>55) Application.Quit();
+    }
+    internal static void SaveCameraFrame(Camera camera,string path,int width,int height,int msaa) {
+        var previous=RenderTexture.active;
+        var target=RenderTexture.GetTemporary(width,height,24,RenderTextureFormat.ARGB32,RenderTextureReadWrite.Default,msaa);
+        var image=new Texture2D(width,height,TextureFormat.RGB24,false);
+        try {
+            RenderPipeline.SubmitRenderRequest(camera,new RenderPipeline.StandardRequest{destination=target});
+            RenderTexture.active=target;
+            image.ReadPixels(new Rect(0,0,width,height),0,0);image.Apply();
+            File.WriteAllBytes(path,image.EncodeToPNG());
+        } finally {
+            RenderTexture.active=previous;RenderTexture.ReleaseTemporary(target);Destroy(image);
+        }
     }
     void Apply() {
         if(Data==null)return;int index=Clock.Index;var state=Data.frames[index].state;
@@ -217,6 +258,8 @@ public partial class ReplayPlayer : MonoBehaviour {
                 Item soup=null;
                 foreach(var candidate in state.objects)
                     if(candidate.name=="soup" && candidate.position[0]==stove.Key.x && candidate.position[1]==stove.Key.y){soup=candidate;break;}
+                if(Data.header.IsPartition){int j=Array.IndexOf(PartitionReplay.Pots,stove.Key.y*13+stove.Key.x);
+                    int heat=state.partition.heat[j];soup=heat==0?null:new Item{is_cooking=heat<4,is_ready=heat==4};}
                 stove.Value.SetSoup(soup);
             }
             foreach(var marker in handoffStations.Values)marker.sharedMaterial=KitchenFactory.Material("#306F73");
@@ -234,26 +277,32 @@ public partial class ReplayPlayer : MonoBehaviour {
                     KitchenFactory.Part("CookingProgress",objects,PrimitiveType.Cube,p+new Vector3((ratio-1)*.28f,.35f,.38f),new Vector3(Mathf.Max(.01f,ratio*.56f),.045f,.055f),KitchenFactory.Material(o.is_ready?"#78c994":"#eebd64"));
                 } else KitchenFactory.Item(o.name,objects,p);
             }
+            if(Data.header.IsPartition)PartitionKitchenView.Draw(state.partition,objects);
+            if(sharedKitchen!=null)sharedKitchen.ShowFrame(state.shared);
             applied=index;
         }
         for(int i=0;i<chefs.Length;i++) {
             var p=state.players[i];Vector3 pos=World(p.position);float angle=Mathf.Atan2(p.orientation[0],-p.orientation[1])*Mathf.Rad2Deg;
-            bool moving=false;float turnProgress=Clock.Alpha;
+            bool moving=false;float turnProgress=Clock.Alpha,turnDelta=0;
             if(index<Data.segments.Length && Data.segments[index].kind=="step") {
                 var q=Data.frames[index+1].state.players[i];var dest=World(q.position);moving=pos!=dest;
                 pos=Vector3.Lerp(pos,dest,Clock.Alpha);
                 float duration=Data.frames[index+1].time-Data.frames[index].time;
                 turnProgress=duration>0?Mathf.Clamp01(Clock.Alpha*duration/Mathf.Min(.11f,duration)):0;
-                angle=Mathf.LerpAngle(angle,Mathf.Atan2(q.orientation[0],-q.orientation[1])*Mathf.Rad2Deg,Mathf.SmoothStep(0,1,turnProgress));
+                float nextAngle=Mathf.Atan2(q.orientation[0],-q.orientation[1])*Mathf.Rad2Deg;
+                turnDelta=Mathf.DeltaAngle(angle,nextAngle);
+                angle+=turnDelta*Mathf.SmoothStep(0,1,turnProgress);
             }
             var chef=chefs[i];chef.localPosition=pos;chef.localRotation=Quaternion.Euler(0,angle,0);
             bool interacting=false;
             if(index<Data.segments.Length&&Data.segments[index].kind=="step"&&Data.segments[index].actions[i]==5&&Data.segments[index].events!=null)
-                foreach(var e in Data.segments[index].events)if(e.agent_index==i)interacting=true;
+                foreach(var e in Data.segments[index].events)if(e.HasActor(i)&&(!Data.header.IsPartition||PartitionReplay.IsSuccessfulAction(e.kind)))interacting=true;
             string held=p.held_object?.name??"";
             var character=characterActors[i];
             if(character!=null) {
-                var action=BlueFishReplayPose.Select(Data,index,i);
+                var claude=character as TrueClaudeActor;
+                if(claude)claude.TurnSign=Mathf.Sign(turnDelta);
+                var action=BlueFishReplayPose.Select(Data,index,i,claude!=null);
                 float visualTime=Presentation.Time;
                 float celebration=BlueFishReplayPose.CelebrationPhase(Data,index,i,visualTime);
                 float actionTime=BlueFishMotion.Loops(action)?visualTime:(action==FishAction.Turn?turnProgress:Clock.Alpha)*BlueFishMotion.Duration(action);
@@ -266,7 +315,12 @@ public partial class ReplayPlayer : MonoBehaviour {
             }
             if(heldNames[i]!=held) {
                 var anchor=character!=null?character.HeldAnchor:chef.Find("HeldAnchor");foreach(Transform child in anchor)Destroy(child.gameObject);
-                if(held!="")KitchenFactory.Item(held,anchor,Vector3.zero,character!=null ? .30f : .4f);heldNames[i]=held;
+                if(held!="") {
+                    float size=character!=null?.30f:.4f;
+                    if(sharedKitchen!=null)SharedKitchenView.Item(held,anchor,Vector3.zero,size);
+                    else KitchenFactory.Item(held,anchor,Vector3.zero,size);
+                }
+                heldNames[i]=held;
             }
         }
         if(stoves.Count>0) {

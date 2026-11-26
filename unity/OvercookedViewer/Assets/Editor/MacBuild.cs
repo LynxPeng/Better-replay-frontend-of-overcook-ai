@@ -22,6 +22,7 @@ public static class MacBuild {
         PlatformResourceChecks.Prepare();PlatformResourceChecks.Run();
         if(live)LiveBuild.Prepare();
         else {
+            TrueClaudeBootstrap.Prepare();ReplayCharacterChecks.Slots();PartitionReplayChecks.SharedKitchen();
             ReplayUiChecks.State();SimmerChecks.Run();CafeFixtureChecks.Run();
             ReplayChecks.SerializerRegression();ReplayChecks.Run();
         }

@@ -18,6 +18,8 @@ public static class ReplayCharacterChecks {
         if(method==null)throw new Exception("Replay has no per-player local character selection");
         string blue=(string)method.Invoke(null,new object[]{0,true}),orange=(string)method.Invoke(null,new object[]{1,true});
         if(blue!="LocalCharacters/BlueFatFish"||orange!="LocalCharacters/GuguGaga")throw new Exception("Blue fish and orange penguin must keep their original player slots");
+        if(ReplayPlayer.CharacterResource(2,true)!="LocalCharacters/TrueClaude"||ReplayPlayer.CharacterResource(2,false)!=null)
+            throw new Exception("Green slot must select the True Claude actor when enabled");
         if(method.Invoke(null,new object[]{1,false})!=null)throw new Exception("Disabled character must use primitive fallback");
         Debug.Log("Replay local character slot checks passed");
     }

@@ -150,6 +150,8 @@ def main():
     quickstart = "MACOS-LIVE-QUICKSTART.md" if live else "MACOS-QUICKSTART.md"
     extras += [(repo / quickstart, "README.md")]
     extras += [(repo / "unity/OvercookedViewer/Assets/StreamingAssets/CharacterCredits.txt", "CharacterCredits.txt")]
+    if not live:
+        extras.append((repo / "examples/replays/green-server-seed3.replay.json", "green-server-seed3.replay.json"))
     hosts = ()
     if live:
         hosts = (("arm64", args.host_arm64), ("x86_64", args.host_x86_64))

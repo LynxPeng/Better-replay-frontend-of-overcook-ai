@@ -33,5 +33,6 @@ public static class ReplayUiChecks {
         }
         Debug.Log("Replay UI settings transaction and four-resolution layout checks passed");
     }
-    public static void Build(){State();CameraLandscapeChecks.Navigation();CameraLandscapeChecks.Gestures();NativeDialogChecks.Build();}
+    public static void Build(){ScoreMarkers();PartitionReplayChecks.SharedKitchen();State();CameraLandscapeChecks.Navigation();CameraLandscapeChecks.Gestures();NativeDialogChecks.Build();}
+    public static void ScoreMarkers(){ReplayChecks.ScoreMarkerRegression();}
 }

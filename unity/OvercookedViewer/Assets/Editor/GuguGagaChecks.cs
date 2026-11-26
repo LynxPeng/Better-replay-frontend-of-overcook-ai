@@ -22,7 +22,7 @@ public static class GuguGagaChecks {
             Check(actor.Bone(HumanBodyBones.LeftHand).position.x<0,"Penguin anatomical left must be normalized -X");
             Check(actor.Joint("Eyelid_upper_L").position.z>actor.Bone(HumanBodyBones.Head).position.z,"Penguin must face +Z");
             var rootPosition=instance.transform.position;var rootRotation=instance.transform.rotation;
-            foreach(FishAction action in Enum.GetValues(typeof(FishAction))) {
+            foreach(FishAction action in BlueFishMotion.PreviewActions) {
                 actor.Sample(action,.27f,1,1.2f,.3f);
                 var transforms=actor.AnimatedTransforms.ToArray();var positions=transforms.Select(t=>t.localPosition).ToArray();var rotations=transforms.Select(t=>t.localRotation).ToArray();
                 actor.Sample(FishAction.Walk,10,1,2.6f,-1);actor.Sample(action,.27f,1,1.2f,.3f);

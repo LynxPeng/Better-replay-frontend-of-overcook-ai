@@ -41,7 +41,9 @@ public partial class ReplayPlayer {
             if(IsLive)live.Draw(ui,height);
             else {Sidebar(height);if(Clock!=null)Transport(height);}
             if(!IsLive||live.ShowKitchen)Toolbar();
-            if(labels&&Clock!=null&&(!IsLive||live.ShowKitchen))Names(scale);
+            if(Clock!=null&&sharedKitchen!=null)SharedOverlay(scale);
+            else if(labels&&Clock!=null&&(!IsLive||live.ShowKitchen))Names(scale);
+            if(labels&&Clock!=null&&Data.header.IsPartition)PartitionLabels(scale);
             if(live && live.Reviewing && ui.Click(new Rect(310,84,110,30),"返回联机房间"))live.EndReview();
             GUI.enabled=true;settings.Draw(ui,height,p=>ApplyPreferences(p,true));
         }finally{GUI.matrix=previous;GUI.enabled=enabled;}
@@ -54,22 +56,28 @@ public partial class ReplayPlayer {
         ui.ServiceBell(new Rect(227,28,38,36));
         ui.Fill(new Rect(32,73,234,1),ReplayUiTheme.Hex("#547761"));
         ui.Label(new Rect(32,82,98,20),"团队得分",ui.OnDarkCaption);
-        ui.Label(new Rect(32,101,128,48),Clock==null?"—":Data.frames[Clock.Index].score.ToString("0"),ui.OnDarkScore);
+        ui.Label(new Rect(32,101,128,48),Clock==null?"—":Data.frames[Clock.Index].score.ToString(sharedKitchen!=null?"0.##":"0"),ui.OnDarkScore);
         ui.Label(new Rect(175,83,92,20),"当前步数",ui.OnDarkCaption);
-        ui.Label(new Rect(175,108,95,34),Clock==null?"—":$"{Clock.Index} / {Data.frames.Length-1}",ui.OnDark);
+        string currentStep=Clock==null?"—":$"{Clock.Index} / {Data.frames.Length-1}";
+        if(sharedKitchen!=null)currentStep=$"{Data.frames[Clock.Index].state.timestep} / {Data.header.horizon}";
+        ui.Label(new Rect(175,108,95,34),currentStep,ui.OnDark);
         if(ui.Click(new Rect(32,178,234,36),"打开本地回放",ui.Primary))OpenReplay();
         string fileLabel=loadedName.Length>31?loadedName.Substring(0,15)+"…"+loadedName.Substring(loadedName.Length-15):loadedName;
         GUI.Label(new Rect(33,217,232,24),new GUIContent(fileLabel,loadedName),ui.Caption);
         ui.Perforation(32,250,234);
         var orders=Clock!=null?Data.frames[Clock.Index].state.all_orders:null;
+        var shared=Clock!=null&&sharedKitchen!=null?Data.frames[Clock.Index].state.shared:null;
+        int orderCount=shared!=null?shared.orders.Length:(orders?.Length??0);
         var handoffs=Clock!=null?LastHandoffs:null;
-        float contentHeight=235+(kitchenListOpen?(samples?.Length??0)*30:0)+Mathf.Max(1,orders?.Length??0)*54+(error!=""?110:0)+(Data!=null&&!Data.header.complete?35:0);
+        float contentHeight=235+(kitchenListOpen?(samples?.Length??0)*30:0)+Mathf.Max(1,orderCount)*54+(error!=""?110:0)+(Data!=null&&!Data.header.complete?35:0);
+        if(shared!=null)contentHeight+=100;
         if(Data?.header.players.Length==3)contentHeight+=33;
+        if(Data?.header.IsPartition==true)contentHeight+=180;
         contentHeight+=(handoffs?.Length??0)*29;
         sidebarScroll=GUI.BeginScrollView(new Rect(30,264,242,Mathf.Max(60,height-335)),sidebarScroll,new Rect(0,0,225,contentHeight),false,false,GUIStyle.none,ui.ScrollTrack);
         float y=0;
         ui.Label(new Rect(2,y,220,22),"厨房选择",ui.Heading);y+=28;
-        string selected=Data==null?"选择一个厨房":ReplayUiTheme.KitchenName(Data.header.layout_name);
+        string selected=Data==null?"选择一个厨房":shared!=null?"共享厨房":ReplayUiTheme.KitchenName(Data.header.layout_name);
         if(ui.Click(new Rect(0,y,224,36),selected+(kitchenListOpen?"  ▴":"  ▾"),ui.RowSelected))kitchenListOpen=!kitchenListOpen;
         y+=40;
         if(kitchenListOpen&&samples!=null)foreach(var path in samples) {
@@ -79,17 +87,32 @@ public partial class ReplayPlayer {
         }
         y+=8;ui.Rule(2,y,220);y+=14;
         if(Clock!=null) {
+            if(shared!=null)SharedSummary(shared,ref y);
             ui.Label(new Rect(2,y,220,22),"当前订单",ui.Heading);y+=30;
-            if(orders==null||orders.Length==0){ui.Label(new Rect(2,y,220,26),"暂无订单",ui.Caption);y+=30;}
-            else foreach(var order in orders) {
-                ui.OrderTicket(new Rect(0,y,224,46),order.ingredients);y+=54;
+            if(orderCount==0){ui.Label(new Rect(2,y,220,26),"暂无订单",ui.Caption);y+=30;}
+            else if(shared!=null) {
+                foreach(var order in shared.orders) {
+                    bool joint=order.kind=="joint";
+                    ui.Panel(new Rect(0,y,224,47),soft:true);
+                    ui.Fill(new Rect(0,y+5,4,37),joint?ui.OrangeSeat:ui.BlueSeat);
+                    ui.Label(new Rect(12,y+1,140,24),$"#{order.id}  {(joint?"联合单":"普通单")}",ui.Heading);
+                    ui.Label(new Rect(162,y+1,60,24),SharedKitchenView.OrderStatus(order.status),ui.Text);
+                    ui.Label(new Rect(12,y+22,204,23),joint?"两侧厨师同步出锅":"一位厨师即可出锅",ui.Caption);
+                    y+=54;
+                }
             }
+            else foreach(var order in orders) {
+                if(Data.header.IsPartition){PartitionOrder(order,y);y+=68;}
+                else {ui.OrderTicket(new Rect(0,y,224,46),order.ingredients);y+=54;}
+            }
+            if(Data.header.IsPartition){PartitionEventRows(ref y);}
             y+=4;ui.Perforation(2,y,220);y+=14;
             ui.Label(new Rect(2,y,220,22),"出场厨师",ui.Heading);y+=24;
             for(int i=0;i<Data.header.players.Length;i++) {
                 var seatColor=i switch {0=>ui.BlueSeat,1=>ui.OrangeSeat,_=>ChefColors[i]};
                 ui.Fill(new Rect(2,y+9,5,12),seatColor);
-                ui.Label(new Rect(16,y,146,30),ChefDescriptions[i]);
+                string description=i==2&&characterActors[i] is TrueClaudeActor?"绿方   真·Claude娘":ChefDescriptions[i];
+                ui.Label(new Rect(16,y,146,30),description);
                 ui.Label(new Rect(178,y,46,30),Data.header.players[i].is_human?"人类":"AI",ui.Caption);y+=33;
             }
             if(handoffs!=null)foreach(var handoff in handoffs) {
@@ -102,7 +125,82 @@ public partial class ReplayPlayer {
         }
         GUI.EndScrollView(!settings.Open);
         ui.Rule(32,height-66,234);
-        if(ui.Click(new Rect(32,height-56,234,30),(labels?"✓  ":"    ")+"显示角色名称",ui.Row))labels=!labels;
+        if(ui.Click(new Rect(32,height-56,234,30),(labels?"✓  ":"    ")+(shared!=null?"显示角色和工位标签":"显示角色名称"),ui.Row))labels=!labels;
+    }
+    void SharedSummary(SharedFrame frame,ref float y) {
+        ui.Label(new Rect(2,y,222,22),"协作进度",ui.Heading);y+=24;
+        ui.Label(new Rect(2,y,222,21),$"已出餐 {frame.normal_completed+frame.joint_completed}  ·  普通 {frame.normal_completed}  /  联合 {frame.joint_completed}");y+=22;
+        var wait=sharedKitchen.WaitSteps(frame,Clock.Index);
+        string elapsed=wait.HasValue?$"累计联合等待 {wait} 步":$"累计联合就绪 {frame.joint_wait_steps} 步";
+        ui.Label(new Rect(2,y,222,21),elapsed,ui.Caption);y+=20;
+        ui.Label(new Rect(2,y,222,21),$"仅一人尝试出锅 {frame.unmatched_steps} 步",ui.Caption);y+=27;
+    }
+    readonly List<Rect> sharedLabelBounds=new List<Rect>(16);
+    static readonly Color SharedLabelBackground=new Color(.08f,.15f,.13f,.91f);
+    void SharedOverlay(float scale) {
+        var frame=Data.frames[Clock.Index].state.shared;
+        sharedLabelBounds.Clear();
+        int eventFrame=sharedKitchen.LatestEventFrame(Clock.Index);
+        bool showEvent=eventFrame>0&&Clock.Time-Data.frames[eventFrame].time<=1f;
+        int actorMask=0;
+        if(showEvent) {
+            float y=navigation.Locked?73:107;
+            foreach(var entry in Data.segments[eventFrame-1].events) {
+                string operation=SharedKitchenView.EventName(entry.kind);
+                if(operation==null)continue;
+                var names=new List<string>(3);
+                for(int i=0;i<chefs.Length;i++)if(entry.HasActor(i)) {
+                    names.Add(ChefNames[i]);actorMask|=1<<i;
+                }
+                string title=$"第 {Data.frames[eventFrame].state.timestep} 步   {operation}";
+                if(entry.order_id>=0)title+="  #"+entry.order_id;
+                if(names.Count>0)title+="  ·  "+string.Join(" + ",names);
+                if(entry.kind=="meal_delivery") {
+                    float scoreDelta=Data.frames[eventFrame].score-Data.frames[eventFrame-1].score;
+                    title+=$"  本步 {scoreDelta:+0.##;-0.##;0} 分";
+                }
+                var rect=new Rect(312,y,ui.OnDark.CalcSize(new GUIContent(title)).x+28,28);
+                ui.Panel(rect,dark:true);ui.Fill(new Rect(rect.x+1,y+6,3,16),ui.Gold);
+                ui.Label(new Rect(rect.x+12,y,rect.width-16,28),title,ui.OnDark);
+                sharedLabelBounds.Add(rect);y+=31;
+            }
+        }
+        if(!labels)return;
+        for(int i=0;i<chefs.Length;i++) {
+            string held=Data.frames[Clock.Index].state.players[i].held_object?.name;
+            string text=string.IsNullOrEmpty(held)?ChefNames[i]:ChefNames[i]+" · "+SharedKitchenView.ItemName(held);
+            SharedWorldLabel(chefs[i].position+Vector3.up*ReplayUiLayout.NameHeight,text,scale,
+                (actorMask&(1<<i))!=0?ui.Gold:ChefColors[i]);
+        }
+        foreach(var station in sharedKitchen.Stations) {
+            string label=SharedKitchenView.StationLabel(station.Key,frame);
+            SharedWorldLabel(station.Value+Vector3.up*.38f,label,scale,Color.clear);
+        }
+    }
+    void SharedWorldLabel(Vector3 point,string title,float scale,Color accent) {
+        var screen=Camera.main.WorldToScreenPoint(point);
+        if(screen.z<=0)return;
+        var anchor=new Vector2(screen.x/scale,(Screen.height-screen.y)/scale);
+        float bottom=Screen.height/scale*.83f-3;
+        if(anchor.x<302||anchor.x>1268||anchor.y<72||anchor.y>bottom)return;
+        float width=ui.White.CalcSize(new GUIContent(title)).x+14;
+        var rect=new Rect(Mathf.Clamp(anchor.x-width*.5f,302,1268-width),anchor.y-16,width,19);
+        for(int attempt=0;attempt<11;attempt++) {
+            int shift=(attempt+1)/2*(attempt%2==1?-1:1);
+            rect.y=Mathf.Clamp(anchor.y-16+shift*20,70,bottom-19);
+            bool overlap=false;
+            foreach(var occupied in sharedLabelBounds)if(occupied.Overlaps(rect)){overlap=true;break;}
+            if(overlap)continue;
+            sharedLabelBounds.Add(rect);
+            if(shift!=0) {
+                float edge=anchor.y>rect.yMax?rect.yMax:rect.yMin;
+                ui.Fill(new Rect(anchor.x,Mathf.Min(edge,anchor.y),1,Mathf.Abs(edge-anchor.y)),Color.white);
+            }
+            ui.Fill(rect,SharedLabelBackground);
+            if(accent.a>0)ui.Fill(new Rect(rect.x,rect.y,3,rect.height),accent);
+            ui.Label(new Rect(rect.x+7,rect.y,rect.width-9,rect.height),title,ui.White);
+            return;
+        }
     }
     void Toolbar() {
         ui.Panel(new Rect(310,18,568,46));
@@ -125,10 +223,7 @@ public partial class ReplayPlayer {
     void Transport(float height) {
         if(markedReplay!=Data) {
             markedReplay=Data;deliveryTimes.Clear();
-            for(int i=0;i<Data.segments.Length;i++) {
-                var events=Data.segments[i].events;
-                if(events!=null && Array.Exists(events,e=>e.kind=="soup_delivery"))deliveryTimes.Add(Data.frames[i+1].time);
-            }
+            deliveryTimes.AddRange(ReplayFile.ScoreMarkerTimes(Data));
         }
         var panel=ReplayUiLayout.Transport(height);ui.Panel(panel);float y=panel.y+10;
         if(ui.Click(new Rect(324,y,94,34),Presentation.Playing?"Ⅱ  暂停":"▶  播放",ui.Primary))Presentation.Toggle();
@@ -138,7 +233,7 @@ public partial class ReplayPlayer {
         ui.Label(new Rect(640,y,165,34),ClockText(Clock.Time)+" / "+ClockText(Clock.Duration),ui.Numeric);
         if(deliveryTimes.Count>0) {
             ui.Fill(new Rect(806,y+14,6,6),ui.Gold);
-            ui.Label(new Rect(818,y,75,34),"交付标记",ui.Caption);
+            ui.Label(new Rect(818,y,75,34),"得分标记",ui.Caption);
         }
         ui.Label(new Rect(904,y,42,34),"倍速",ui.Caption);
         for(int i=0;i<PlaybackSpeeds.Length;i++)if(ui.Click(new Rect(948+i*60,y,56,34),PlaybackSpeeds[i]+"×",Mathf.Abs(Clock.Speed-PlaybackSpeeds[i])<.001f?ui.Selected:ui.Toolbar))Clock.Speed=PlaybackSpeeds[i];

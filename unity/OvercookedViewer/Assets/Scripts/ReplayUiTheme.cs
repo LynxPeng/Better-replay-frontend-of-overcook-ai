@@ -124,12 +124,9 @@ public sealed class ReplayUiTheme : System.IDisposable {
         Fill(r,Paper);
         Fill(new Rect(x,y-2,span,4),trackColor);
         Fill(new Rect(x,y-2,Mathf.Max(0,head-x),4),progressColor);
-        float previous=float.NegativeInfinity;
         foreach(float stamp in deliveries) {
             float marker=x+span*Mathf.Clamp01(stamp/limit);
-            if(marker-previous<5)continue;
             Fill(new Rect(marker-2.5f,y+4,5,7),Gold);
-            previous=marker;
         }
         var knob=new Rect(head-7,y-7,14,14);
         Thumb.Draw(knob,knob.Contains(Event.current.mousePosition),GUIUtility.hotControl!=0 && r.Contains(Event.current.mousePosition),
@@ -169,7 +166,12 @@ public sealed class ReplayUiTheme : System.IDisposable {
         if(numbers)UnityEngine.Object.Destroy(numbers);
     }
     public static string KitchenName(string name) {
+        if(name.StartsWith("partition_v3_sync",System.StringComparison.Ordinal))return name=="partition_v3_sync"?"v3 · 双同步口":name.Replace("partition_v3_sync_","v3 同步 · ");
+        if(name.StartsWith("partition_v3_counter",System.StringComparison.Ordinal))return name=="partition_v3_counter"?"v3 · 共享台面":name.Replace("partition_v3_counter_","v3 台面 · ");
         switch(name){
+            case "V3-counter":return "v3 · 共享台面";
+            case "v3-counter-projection":return "v3 · 共享台面";
+            case "V3-sync":return "v3 · 双同步口";
             case "cramped_room":return "拥挤厨房";
             case "asymmetric_advantages":return "非对称厨房";
             case "coordination_ring":return "协作环岛";

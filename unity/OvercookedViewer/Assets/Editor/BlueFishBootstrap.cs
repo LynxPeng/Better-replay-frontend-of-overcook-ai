@@ -61,7 +61,7 @@ public static class BlueFishBootstrap {
     }
     static void Bake(BlueFishActor actor) {
         var bones=actor.AnimatedTransforms.ToList();
-        foreach(FishAction action in Enum.GetValues(typeof(FishAction))) {
+        foreach(FishAction action in BlueFishMotion.PreviewActions) {
             var curves=new Dictionary<string,AnimationCurve[]>();
             foreach(var bone in bones)curves[AnimationUtility.CalculateTransformPath(bone,actor.transform)]=Enumerable.Range(0,7).Select(_=>new AnimationCurve()).ToArray();
             float duration=BlueFishMotion.Duration(action);int count=Mathf.CeilToInt(duration*30);

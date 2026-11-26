@@ -3,7 +3,7 @@ using UnityEngine;
 namespace OvercookedReplay {
 public enum KitchenView {LongEdge,Isometric}
 public static class KitchenCamera {
-    public static Vector3 Apply(Camera camera,int width,int height,KitchenView mode,float zoom,float turn,float pitch=42) {
+    public static Vector3 Apply(Camera camera,int width,int height,KitchenView mode,float zoom,float turn,float pitch=42,bool fitKitchenOnly=false) {
         Vector3 target=new Vector3((width-1)*.5f,.45f,-(height-1)*.5f);
         float yaw=(width>=height?0:90)+turn;
         pitch=Mathf.Clamp(pitch,35,65);
@@ -17,8 +17,9 @@ public static class KitchenCamera {
         // Fit in camera space: every point needs positive depth and must lie in
         // both side planes of the perspective frustum. Frame the restaurant and
         // the upper street; distant gardens may crop like the user's reference.
-        var points=new Vector3[16];int index=0;
-        for(int box=0;box<2;box++)for(int x=0;x<2;x++)for(int z=0;z<2;z++)for(int y=0;y<2;y++) {
+        int boxes=fitKitchenOnly?1:2;
+        var points=new Vector3[8*boxes];int index=0;
+        for(int box=0;box<boxes;box++)for(int x=0;x<2;x++)for(int z=0;z<2;z++)for(int y=0;y<2;y++) {
             float minX=box==0?-.5f:-3.8f,maxX=box==0?width-.5f:width+2.8f;
             float minZ=box==0?-height+.5f:-height-.6f,maxZ=box==0?.5f:8.2f;
             // The near edge is floor, not a tall front wall. Keeping its top

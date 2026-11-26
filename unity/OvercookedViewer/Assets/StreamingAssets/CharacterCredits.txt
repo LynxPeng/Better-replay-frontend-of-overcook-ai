@@ -14,3 +14,10 @@ Compiled-player distribution permission supplied by the publisher; full text in 
 Model metadata is retained unchanged. No standalone model/source redistribution or ML-training rights are granted.
 Original replay animations and deterministic bone adapters: this project.
 No additional rights to the BlueFatFish model are granted by the source-code license.
+
+真·Claude娘 / TrueClaude_FPS_Rig_v001
+Original author: a2244921700-code, 《蓝色肥鱼大作战》. Mesh, textures and skeleton adapted from claude_true for replay.
+Noncommercial use and redistribution under LICENSES/BlueFatFishBattle-noncommercial-zh.txt.
+https://github.com/a2244921700-code/blue-fat-fish-battle
+https://github.com/a2244921700-code/blue-fat-fish-battle/tree/3a3d84060f84a63d2f92764c56051805ce98e624/assets/characters/runtime
+Kitchen motion and replay integration by this project. See THIRD_PARTY_NOTICES.md for the asset source and terms.
